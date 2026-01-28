@@ -646,6 +646,24 @@ export function IN_IsPointerLocked() {
 
 /*
 ===========
+IN_RequestPointerLock
+
+Request pointer lock from a user gesture context (e.g. menu selection).
+Only applies on desktop; mobile uses fullscreen instead.
+===========
+*/
+export function IN_RequestPointerLock() {
+
+	if ( ! pointerLocked && targetElement && ! isMobile ) {
+
+		targetElement.requestPointerLock();
+
+	}
+
+}
+
+/*
+===========
 IN_IsMobile
 
 Returns true if running on a mobile device

@@ -41,7 +41,7 @@ import { CDAudio_Init, CDAudio_Update, CDAudio_Shutdown } from './cd_audio.js';
 import { Sbar_Init, Sbar_SetExternals } from './sbar.js';
 import { CL_Init, CL_SendCmd, CL_ReadFromServer, CL_DecayLights, CL_Disconnect, CL_EstablishConnection, CL_NextDemo } from './cl_main.js';
 import { CL_StopPlayback } from './cl_demo.js';
-import { IN_Init, IN_Commands, IN_Shutdown, IN_UpdateTouch } from './in_web.js';
+import { IN_Init, IN_Commands, IN_Shutdown, IN_UpdateTouch, IN_RequestPointerLock } from './in_web.js';
 import { cls, cl, SIGNONS, ca_connected, ca_dedicated, MAX_DEMOS } from './client.js';
 import { key_dest, key_game, Key_SetExternals, set_key_dest } from './keys.js';
 import { r_origin, vpn, vright, vup } from './render.js';
@@ -323,6 +323,7 @@ export async function Host_Init( parms ) {
 		Draw_String: Draw_String,
 		S_LocalSound: S_LocalSound,
 		SCR_BeginLoadingPlaque: SCR_BeginLoadingPlaque,
+		IN_RequestPointerLock: IN_RequestPointerLock,
 		host_time_get: () => host_time,
 		realtime_get: () => realtime
 	} );
