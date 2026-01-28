@@ -420,7 +420,6 @@ export function IN_Init( element ) {
 
 	// Initialize touch controls for mobile
 	isMobile = Touch_IsMobile();
-	console.log( 'IN_Init: Touch_IsMobile =', isMobile );
 	if ( isMobile ) {
 
 		// Always append touch UI to document.body for consistent positioning
@@ -565,14 +564,6 @@ export function IN_Move( cmd ) {
 		// Apply touch look directly to view angles
 		if ( touchLook.x !== 0 || touchLook.y !== 0 ) {
 
-			// Debug: log once when touch look data starts flowing
-			if ( ! IN_Move._touchLookLogged ) {
-
-				console.log( 'IN_Move: Receiving touch look data:', touchLook );
-				IN_Move._touchLookLogged = true;
-
-			}
-
 			cl.viewangles[ YAW ] -= m_yaw.value * touchLook.x * sensitivity.value * 2;
 
 			cl.viewangles[ PITCH ] += m_pitch.value * touchLook.y * sensitivity.value * 2;
@@ -585,14 +576,6 @@ export function IN_Move( cmd ) {
 
 		// Add touch joystick movement
 		const touchMove = Touch_GetMoveInput();
-
-		// Debug: log once when touch movement data starts flowing
-		if ( ( touchMove.forward !== 0 || touchMove.right !== 0 ) && ! IN_Move._touchMoveLogged ) {
-
-			console.log( 'IN_Move: Receiving touch movement data:', touchMove );
-			IN_Move._touchMoveLogged = true;
-
-		}
 
 		cmd.forwardmove += cl_forwardspeed.value * touchMove.forward;
 		cmd.sidemove += cl_sidespeed.value * touchMove.right;
@@ -692,7 +675,6 @@ export function IN_UpdateTouch() {
 		// In game (not demo) - show game controls, hide menu controls
 		if ( ! Touch_IsEnabled() ) {
 
-			console.log( 'IN_UpdateTouch: Enabling touch controls (key_dest=game, not demo)' );
 			Touch_Enable();
 			mouseactive = true;
 

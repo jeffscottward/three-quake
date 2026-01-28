@@ -329,12 +329,6 @@ export function SND_PickChannel( entnum, entchannel ) {
 
 	}
 
-	if ( snd_show.value && channels[ first_to_die ].sfx ) {
-
-		console.log( 'SND_PickChannel: replacing', channels[ first_to_die ].sfx.name, 'on ch', first_to_die );
-
-	}
-
 	if ( channels[ first_to_die ].sfx )
 		channels[ first_to_die ].sfx = null;
 
@@ -425,22 +419,8 @@ export function S_StartSound( entnum, entchannel, sfx, origin, fvol, attenuation
 
 	// pick a channel to play on
 	const target_chan = SND_PickChannel( entnum, entchannel );
-	if ( ! target_chan ) {
-
-		if ( snd_show.value )
-			console.log( 'S_StartSound: no channel for', sfx.name );
-
+	if ( ! target_chan )
 		return;
-
-	}
-
-	// Debug: log sound being played
-	if ( snd_show.value ) {
-
-		const ch_idx = channels.indexOf( target_chan );
-		console.log( 'S_StartSound:', sfx.name, 'ent:', entnum, 'ch:', entchannel, '-> slot', ch_idx );
-
-	}
 
 	// spatialize
 	target_chan.origin[ 0 ] = origin[ 0 ];
@@ -461,8 +441,6 @@ export function S_StartSound( entnum, entchannel, sfx, origin, fvol, attenuation
 	if ( ! sc ) {
 
 		target_chan.sfx = null;
-		if ( snd_show.value )
-			console.log( 'S_StartSound: failed to load', sfx.name );
 		return; // couldn't load the sound's data
 
 	}
@@ -471,8 +449,6 @@ export function S_StartSound( entnum, entchannel, sfx, origin, fvol, attenuation
 	if ( ! sc.data || sc.length === 0 ) {
 
 		target_chan.sfx = null;
-		if ( snd_show.value )
-			console.log( 'S_StartSound: invalid sound data for', sfx.name );
 		return;
 
 	}
@@ -1021,13 +997,6 @@ function _playWebAudio( sc, chan ) {
 		}
 
 		source.start();
-
-		if ( snd_show.value >= 2 ) {
-
-			console.log( 'Playing:', chan.sfx ? chan.sfx.name : '?',
-				'len:', sc.length, 'rate:', sc.speed, 'loop:', sc.loopstart >= 0 );
-
-		}
 
 	} catch ( e ) {
 
