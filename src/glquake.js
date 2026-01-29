@@ -258,7 +258,7 @@ export const gl_max_size = { name: 'gl_max_size', string: '1024', value: 1024 };
 export const gl_playermip = { name: 'gl_playermip', string: '0', value: 0 };
 export const gl_subdivide_size = { name: 'gl_subdivide_size', string: '128', value: 128 };
 // Texture filtering: 0 = nearest (pixelated), 1 = linear (smooth)
-export const gl_texturemode = { name: 'gl_texturemode', string: '0', value: 0 };
+export const gl_texturemode = { name: 'gl_texturemode', string: '0', value: 0, archive: true };
 
 // Track all game textures for filter updates
 export const _allGameTextures = [];

@@ -21,6 +21,44 @@ Cvar_RegisterVariable(host_framerate);
 import { Con_Printf } from './common.js';
 import { Cmd_Exists, Cmd_Argc, Cmd_Argv } from './cmd.js';
 
+// localStorage key prefix for saved cvars
+const CVAR_STORAGE_PREFIX = 'quake_cvar_';
+
+// Save a cvar to localStorage
+function Cvar_SaveToStorage( _var ) {
+
+	if ( typeof localStorage === 'undefined' ) return;
+
+	try {
+
+		localStorage.setItem( CVAR_STORAGE_PREFIX + _var.name, _var.string );
+
+	} catch ( e ) {
+
+		// localStorage might be full or disabled
+		Con_Printf( 'Warning: Could not save cvar ' + _var.name + ' to localStorage\n' );
+
+	}
+
+}
+
+// Load a cvar from localStorage (returns null if not found)
+function Cvar_LoadFromStorage( name ) {
+
+	if ( typeof localStorage === 'undefined' ) return null;
+
+	try {
+
+		return localStorage.getItem( CVAR_STORAGE_PREFIX + name );
+
+	} catch ( e ) {
+
+		return null;
+
+	}
+
+}
+
 export class cvar_t {
 
 	constructor( name, string, archive, server ) {
@@ -139,6 +177,13 @@ export function Cvar_Set( var_name, value ) {
 
 	}
 
+	// Save to localStorage if this cvar should be archived
+	if ( _var.archive && changed ) {
+
+		Cvar_SaveToStorage( _var );
+
+	}
+
 }
 
 /*
@@ -174,6 +219,18 @@ export function Cvar_RegisterVariable( variable ) {
 
 		Con_Printf( 'Cvar_RegisterVariable: ' + variable.name + ' is a command\n' );
 		return;
+
+	}
+
+	// Check for saved value in localStorage (for archived cvars)
+	if ( variable.archive ) {
+
+		const savedValue = Cvar_LoadFromStorage( variable.name );
+		if ( savedValue !== null ) {
+
+			variable.string = savedValue;
+
+		}
 
 	}
 
