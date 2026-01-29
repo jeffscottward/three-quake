@@ -3,6 +3,7 @@
 
 import { K_ESCAPE, K_ENTER, K_UPARROW, K_DOWNARROW, Key_Event, key_game, key_menu, key_dest } from './keys.js';
 import { in_jump, in_attack } from './cl_input.js';
+import { S_UnlockAudio } from './snd_dma.js';
 
 // Touch state
 let enabled = false;
@@ -214,6 +215,9 @@ function Touch_CreateMenuUI( container ) {
 
 		e.preventDefault();
 
+		// Unlock audio on first user gesture
+		S_UnlockAudio();
+
 		if ( e.touches.length > 0 ) {
 
 			const touch = e.touches[ 0 ];
@@ -244,6 +248,9 @@ Touch event handlers
 function onTouchStart( e ) {
 
 	e.preventDefault();
+
+	// Unlock audio on first user gesture
+	S_UnlockAudio();
 
 	// Debug: log which element received the touch
 	console.log( 'Touch start on:', e.currentTarget === joystickArea ? 'joystickArea' :

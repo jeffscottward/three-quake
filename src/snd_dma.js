@@ -164,6 +164,24 @@ export function S_Startup() {
 }
 
 /*
+================
+S_UnlockAudio
+
+Called from user gesture handlers (mouse/keyboard/touch) to unlock the AudioContext.
+Web Audio API requires a user gesture before audio can play.
+================
+*/
+export function S_UnlockAudio() {
+
+	if ( audioContext && audioContext.state === 'suspended' ) {
+
+		audioContext.resume();
+
+	}
+
+}
+
+/*
 ==================
 S_FindName
 ==================
@@ -884,15 +902,9 @@ function _playWebAudio( sc, chan ) {
 	if ( ! audioContext || ! sc || ! sc.data )
 		return;
 
-	// Resume the AudioContext on first use (requires prior user interaction).
-	// Don't play this sound if still suspended — avoids queuing sounds that
-	// all fire at once when the context finally resumes.
-	if ( audioContext.state === 'suspended' ) {
-
-		audioContext.resume();
+	// Don't play sounds until AudioContext is running (unlocked by user interaction)
+	if ( audioContext.state !== 'running' )
 		return;
-
-	}
 
 	try {
 

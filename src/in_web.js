@@ -26,6 +26,7 @@ import {
 	Touch_ShowMenu, Touch_HideMenu, Touch_SetMenuCallback, Touch_RequestFullscreen
 } from './touch.js';
 import { M_TouchInput } from './menu.js';
+import { S_UnlockAudio } from './snd_dma.js';
 
 /*
 ===========================================================================
@@ -155,6 +156,9 @@ function handleKeyDown( event ) {
 
 	if ( ! in_initialized ) return;
 
+	// Unlock audio on first user gesture
+	S_UnlockAudio();
+
 	const prevKeyDest = key_dest;
 
 	const qkey = mapBrowserKeyToQuake( event );
@@ -224,6 +228,9 @@ function handleMouseMove( event ) {
 function handleMouseDown( event ) {
 
 	if ( ! in_initialized ) return;
+
+	// Unlock audio on first user gesture
+	S_UnlockAudio();
 
 	let qkey;
 	switch ( event.button ) {
@@ -361,6 +368,9 @@ function handleContextMenu( event ) {
 function handleTouchStart( event ) {
 
 	if ( ! in_initialized ) return;
+
+	// Unlock audio on first user gesture
+	S_UnlockAudio();
 
 	// On mobile, request fullscreen only when actually playing a map (not menu, demo, or idle state)
 	if ( isMobile && key_dest === key_game && cls.state === ca_connected && ! cls.demoplayback ) {
