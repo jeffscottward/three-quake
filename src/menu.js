@@ -14,6 +14,7 @@ import { bgmvolume, volume } from './sound.js';
 import { Cvar_SetValue } from './cvar.js';
 import { scr_viewsize, scr_con_current } from './gl_screen.js';
 import { v_gamma } from './view.js';
+import { gl_texturemode, GL_UpdateTextureFiltering } from './glquake.js';
 
 /*
 ==============================================================================
@@ -880,6 +881,11 @@ function M_AdjustSliders( dir ) {
 			Cvar_SetValue( 'lookstrafe', ! lookstrafe.value ? 1 : 0 );
 			break;
 
+		case 13: // texture filtering
+			Cvar_SetValue( 'gl_texturemode', ! gl_texturemode.value ? 1 : 0 );
+			GL_UpdateTextureFiltering();
+			break;
+
 	}
 
 }
@@ -892,7 +898,7 @@ function M_AdjustSliders( dir ) {
 ==============================================================================
 */
 
-const OPTIONS_ITEMS = 13;
+const OPTIONS_ITEMS = 14;
 let m_options_cursor = 0;
 
 function M_Menu_Options_f() {
@@ -948,6 +954,9 @@ function M_Options_Draw() {
 	M_DrawCheckbox( 220, 120, lookstrafe.value );
 
 	M_Print( 16, 128, '    Use old status bar' );
+
+	M_Print( 16, 136, '      Texture Filtering' );
+	M_DrawCheckbox( 220, 136, gl_texturemode.value );
 
 	// cursor
 	M_DrawCharacter( 200, 32 + m_options_cursor * 8, 12 + ( ( Math.floor( _realtime_get() * 4 ) ) & 1 ) );

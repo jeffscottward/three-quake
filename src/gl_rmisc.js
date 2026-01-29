@@ -3,12 +3,13 @@
 import * as THREE from 'three';
 import { Sys_FloatTime } from './sys.js';
 import { Con_Printf } from './common.js';
+import { Cvar_RegisterVariable as Cvar_RegisterVariable_impl, Cvar_SetValue as Cvar_SetValue_impl } from './cvar.js';
 import { d_lightstylevalue, r_viewleaf, r_norefresh, r_lightmap,
 	r_fullbright, r_drawentities, r_drawviewmodel, r_shadows,
 	r_mirroralpha, r_wateralpha, r_dynamic, r_novis, r_speeds,
 	gl_clear, gl_texsort, gl_cull, gl_smoothmodels, gl_affinemodels,
 	gl_polyblend, gl_flashblend, gl_playermip, gl_nocolors,
-	gl_keeptjunctions, gl_reporttjunctions, gl_doubleeyes,
+	gl_keeptjunctions, gl_reporttjunctions, gl_doubleeyes, gl_texturemode,
 	gl_mtexable, skytexturenum, mirrortexturenum,
 	getTextureExtensionNumber, particletexture, playertextures,
 	envmap } from './glquake.js';
@@ -220,41 +221,45 @@ export function R_Init() {
 	}
 
 	// Register cvars
-	if ( Cvar_RegisterVariable ) {
+	const _Cvar_RegisterVariable = Cvar_RegisterVariable || Cvar_RegisterVariable_impl;
+	const _Cvar_SetValue = Cvar_SetValue || Cvar_SetValue_impl;
+	if ( _Cvar_RegisterVariable ) {
 
-		Cvar_RegisterVariable( r_norefresh );
-		Cvar_RegisterVariable( r_lightmap );
-		Cvar_RegisterVariable( r_fullbright );
-		Cvar_RegisterVariable( r_drawentities );
-		Cvar_RegisterVariable( r_drawviewmodel );
-		Cvar_RegisterVariable( r_shadows );
-		Cvar_RegisterVariable( r_mirroralpha );
-		Cvar_RegisterVariable( r_wateralpha );
-		Cvar_RegisterVariable( r_dynamic );
-		Cvar_RegisterVariable( r_novis );
-		Cvar_RegisterVariable( r_speeds );
+		_Cvar_RegisterVariable( r_norefresh );
+		_Cvar_RegisterVariable( r_lightmap );
+		_Cvar_RegisterVariable( r_fullbright );
+		_Cvar_RegisterVariable( r_drawentities );
+		_Cvar_RegisterVariable( r_drawviewmodel );
+		_Cvar_RegisterVariable( r_shadows );
+		_Cvar_RegisterVariable( r_mirroralpha );
+		_Cvar_RegisterVariable( r_wateralpha );
+		_Cvar_RegisterVariable( r_dynamic );
+		_Cvar_RegisterVariable( r_novis );
+		_Cvar_RegisterVariable( r_speeds );
 
-		Cvar_RegisterVariable( gl_clear );
-		Cvar_RegisterVariable( gl_texsort );
+		_Cvar_RegisterVariable( gl_clear );
+		_Cvar_RegisterVariable( gl_texsort );
 
 		if ( gl_mtexable ) {
 
-			Cvar_SetValue( 'gl_texsort', 0.0 );
+			_Cvar_SetValue( 'gl_texsort', 0.0 );
 
 		}
 
-		Cvar_RegisterVariable( gl_cull );
-		Cvar_RegisterVariable( gl_smoothmodels );
-		Cvar_RegisterVariable( gl_affinemodels );
-		Cvar_RegisterVariable( gl_polyblend );
-		Cvar_RegisterVariable( gl_flashblend );
-		Cvar_RegisterVariable( gl_playermip );
-		Cvar_RegisterVariable( gl_nocolors );
+		_Cvar_RegisterVariable( gl_cull );
+		_Cvar_RegisterVariable( gl_smoothmodels );
+		_Cvar_RegisterVariable( gl_affinemodels );
+		_Cvar_RegisterVariable( gl_polyblend );
+		_Cvar_RegisterVariable( gl_flashblend );
+		_Cvar_RegisterVariable( gl_playermip );
+		_Cvar_RegisterVariable( gl_nocolors );
 
-		Cvar_RegisterVariable( gl_keeptjunctions );
-		Cvar_RegisterVariable( gl_reporttjunctions );
+		_Cvar_RegisterVariable( gl_keeptjunctions );
+		_Cvar_RegisterVariable( gl_reporttjunctions );
 
-		Cvar_RegisterVariable( gl_doubleeyes );
+		_Cvar_RegisterVariable( gl_doubleeyes );
+
+		_Cvar_RegisterVariable( gl_texturemode );
 
 	}
 

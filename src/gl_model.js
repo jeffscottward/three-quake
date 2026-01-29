@@ -29,6 +29,7 @@ import {
 	TEX_SPECIAL
 } from './bspfile.js';
 import { MAX_QPATH } from './quakedef.js';
+import { gl_texturemode, GL_RegisterTexture } from './glquake.js';
 
 // ============================================================================
 // modelgen.h constants
@@ -682,8 +683,11 @@ function GL_LoadTexture( name, width, height, data, mipmap, alpha ) {
 	}
 
 	const texture = new THREE.DataTexture( rgba, width, height, THREE.RGBAFormat );
-	texture.magFilter = THREE.NearestFilter;
-	texture.minFilter = mipmap ? THREE.NearestMipmapLinearFilter : THREE.NearestFilter;
+	// Use cvar to determine filter mode: 0 = nearest (pixelated), 1 = linear (smooth)
+	const filter = gl_texturemode.value ? THREE.LinearFilter : THREE.NearestFilter;
+	const mipFilter = gl_texturemode.value ? THREE.LinearMipmapLinearFilter : THREE.NearestMipmapLinearFilter;
+	texture.magFilter = filter;
+	texture.minFilter = mipmap ? mipFilter : filter;
 	texture.wrapS = THREE.RepeatWrapping;
 	texture.wrapT = THREE.RepeatWrapping;
 	texture.generateMipmaps = mipmap;
@@ -691,6 +695,9 @@ function GL_LoadTexture( name, width, height, data, mipmap, alpha ) {
 	// Note: flipY defaults to false for DataTexture, which is correct for Quake
 	// Quake's UV T=0 at top + texture row 0 at V=0 means no flip is needed
 	texture.needsUpdate = true;
+
+	// Register for filter updates when setting changes
+	GL_RegisterTexture( texture );
 
 	return texture;
 
