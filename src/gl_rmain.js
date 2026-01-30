@@ -616,27 +616,8 @@ function R_DrawAliasModel( e ) {
 		if ( e === cl.viewent && ambientlight < 24 )
 			ambientlight = shadelight = 24;
 
-		// add dynamic lights
-		for ( let lnum = 0; lnum < MAX_DLIGHTS; lnum ++ ) {
-
-			const dl = cl_dlights[ lnum ];
-			if ( ! dl ) continue;
-			if ( dl.die < cl.time || ! dl.radius ) continue;
-
-			const dx = e.origin[ 0 ] - dl.origin[ 0 ];
-			const dy = e.origin[ 1 ] - dl.origin[ 1 ];
-			const dz = e.origin[ 2 ] - dl.origin[ 2 ];
-			const dist = Math.sqrt( dx * dx + dy * dy + dz * dz );
-			const add = dl.radius - dist;
-
-			if ( add > 0 ) {
-
-				ambientlight += add;
-				shadelight += add;
-
-			}
-
-		}
+		// Dynamic lights are handled by Three.js PointLights now,
+		// so we don't add them to vertex colors here
 
 		// clamp lighting so it doesn't overbright as much
 		if ( ambientlight > 128 )

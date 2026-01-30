@@ -598,18 +598,18 @@ export function GL_DrawAliasFrame( paliashdr, posenum, shadedots, shadelight ) {
 
 			}
 
-			// Generate triangle indices from strip or fan
+			// Generate triangle indices from strip or fan (inverted winding for correct backface culling)
 			if ( isStrip ) {
 
 				for ( let i = 2; i < count; i ++ ) {
 
 					if ( i & 1 ) {
 
-						indices.push( firstVertex + i - 1, firstVertex + i - 2, firstVertex + i );
+						indices.push( firstVertex + i - 1, firstVertex + i, firstVertex + i - 2 );
 
 					} else {
 
-						indices.push( firstVertex + i - 2, firstVertex + i - 1, firstVertex + i );
+						indices.push( firstVertex + i - 2, firstVertex + i, firstVertex + i - 1 );
 
 					}
 
@@ -619,7 +619,7 @@ export function GL_DrawAliasFrame( paliashdr, posenum, shadedots, shadelight ) {
 
 				for ( let i = 2; i < count; i ++ ) {
 
-					indices.push( firstVertex, firstVertex + i - 1, firstVertex + i );
+					indices.push( firstVertex, firstVertex + i, firstVertex + i - 1 );
 
 				}
 
@@ -777,17 +777,20 @@ function R_GetAliasMaterial( paliashdr, entity, hasLighting ) {
 
 	if ( texture ) {
 
-		material = new THREE.MeshBasicMaterial( {
+		material = new THREE.MeshLambertMaterial( {
 			map: texture,
-			side: THREE.DoubleSide,
+			emissiveMap: texture,
+			emissive: 0xffffff,
+			emissiveIntensity: 1,
 			vertexColors: hasLighting
 		} );
 
 	} else {
 
-		material = new THREE.MeshBasicMaterial( {
+		material = new THREE.MeshLambertMaterial( {
 			color: 0xcccccc,
-			side: THREE.DoubleSide,
+			emissive: 0xcccccc,
+			emissiveIntensity: 1,
 			vertexColors: hasLighting
 		} );
 
