@@ -195,7 +195,7 @@ export function CL_ParseTEnt() {
 			VectorCopy( pos, dl.origin );
 			dl.radius = 350;
 			dl.die = cl.time + 0.5;
-			dl.decay = 300;
+			dl.decay = 700; // 350/0.5 = fade to zero over 0.5 seconds
 			S_StartSound( - 1, 0, cl_sfx_r_exp3, pos, 1, 1 );
 			break;
 
@@ -253,7 +253,7 @@ export function CL_ParseTEnt() {
 			VectorCopy( pos, dl2.origin );
 			dl2.radius = 350;
 			dl2.die = cl.time + 0.5;
-			dl2.decay = 300;
+			dl2.decay = 700; // 350/0.5 = fade to zero over 0.5 seconds
 			S_StartSound( - 1, 0, cl_sfx_r_exp3, pos, 1, 1 );
 			break;
 

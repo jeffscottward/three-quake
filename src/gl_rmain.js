@@ -26,6 +26,7 @@ import {
 	cl, cl_visedicts, cl_numvisedicts, cl_dlights, cl_entities,
 	cl_lightstyle
 } from './client.js';
+import { d_lightstylevalue } from './glquake.js';
 export { GL_BuildLightmaps_rsurf as GL_BuildLightmaps };
 
 //============================================================================
@@ -125,7 +126,9 @@ export let r_oldviewleaf = null; // mleaf_t
 
 export let r_notexture_mip = null;
 
-export const d_lightstylevalue = new Int32Array( 256 ); // 8.8 fraction of base light value
+// d_lightstylevalue is imported from glquake.js and re-exported here
+// so gl_rsurf.js can import it (avoids circular dep with gl_rlight.js)
+export { d_lightstylevalue };
 
 export let gldepthmin = 0;
 export let gldepthmax = 1;
@@ -872,18 +875,8 @@ export function R_RenderScene() {
 	// Begin new frame: clear the "this frame" set
 	_entityMeshesThisFrame = new Set();
 
-	// Clean up dynamic lights from previous frame
-	if ( R_RenderDlights._lights ) {
-
-		for ( const light of R_RenderDlights._lights ) {
-
-			if ( scene ) scene.remove( light );
-
-		}
-
-		R_RenderDlights._lights = [];
-
-	}
+	// Dynamic lights are managed by R_RenderDlights - it updates intensity
+	// each frame and removes expired lights from scene
 
 	R_SetupFrame();
 
@@ -949,7 +942,6 @@ export function R_RenderView() {
 	R_RenderScene();
 	R_DrawViewModel();
 	R_DrawWaterSurfaces();
-	R_CleanupWaterMeshes_rsurf();
 
 	// render mirror view
 	R_Mirror();
@@ -962,6 +954,9 @@ export function R_RenderView() {
 		renderer.render( scene, camera );
 
 	}
+
+	// Clean up water meshes AFTER rendering (they need to exist during render)
+	R_CleanupWaterMeshes_rsurf();
 
 	if ( r_speeds.value ) {
 
@@ -1110,10 +1105,9 @@ function S_ExtraUpdate() {
 
 function R_RenderDlights() {
 
-	if ( cl ) {
+	if ( cl != null ) {
 
-		const lights = R_RenderDlights_impl( cl, scene, cl_dlights );
-		if ( lights ) R_RenderDlights._lights = lights;
+		R_RenderDlights_impl( cl, scene );
 
 	}
 

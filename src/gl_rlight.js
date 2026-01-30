@@ -6,6 +6,7 @@ import { MAX_LIGHTSTYLES } from './quakedef.js';
 import { MAXLIGHTMAPS, d_lightstylevalue, r_framecount,
 	gl_flashblend, v_blend } from './glquake.js';
 import { r_origin, vpn, vright, vup } from './render.js';
+import { cl_dlights } from './client.js';
 
 export const MAX_DLIGHTS = 32;
 
@@ -87,9 +88,9 @@ const _dlightPool = [];
 
 function _getDlight( index ) {
 
-	if ( _dlightPool[ index ] ) return _dlightPool[ index ];
+	if ( _dlightPool[ index ] != null ) return _dlightPool[ index ];
 
-	const light = new THREE.PointLight( 0xffaa44, 1, 300, 2 );
+	const light = new THREE.PointLight( 0xffaa44, 1, 300, 1 ); // decay=1 for linear falloff
 	_dlightPool[ index ] = light;
 	return light;
 
@@ -130,36 +131,52 @@ export function R_RenderDlight( light, dlightIndex ) {
 =============
 R_RenderDlights
 
-Adds PointLights to the scene for all active dynamic lights.
+Updates PointLights for all dynamic lights. Lights stay in scene
+and have their intensity updated each frame based on decaying radius.
 =============
 */
-export function R_RenderDlights( cl, scene, cl_dlights ) {
+export function R_RenderDlights( cl, scene ) {
 
-	if ( ! gl_flashblend.value )
+	if ( gl_flashblend.value === 0 )
 		return;
 
 	r_dlightframecount = r_framecount + 1;
 
-	const lights = [];
-
 	for ( let i = 0; i < MAX_DLIGHTS; i ++ ) {
 
 		const l = cl_dlights[ i ];
-		if ( ! l ) continue;
-		if ( l.die < cl.time || ! l.radius )
-			continue;
+		const pooledLight = _dlightPool[ i ];
 
-		const pointLight = R_RenderDlight( l, i );
-		if ( pointLight ) {
+		// Check if this dlight is active
+		const isActive = l != null && l.die >= cl.time && l.radius > 0;
 
-			if ( scene ) scene.add( pointLight );
-			lights.push( pointLight );
+		if ( isActive ) {
+
+			// Active - update properties
+			const pointLight = _getDlight( i );
+			pointLight.position.set( l.origin[ 0 ], l.origin[ 1 ], l.origin[ 2 ] );
+			pointLight.intensity = l.radius * 5;
+			pointLight.decay = 1; // Linear falloff
+
+			// Add to scene if not already there
+			if ( scene != null && pointLight.parent == null ) {
+
+				scene.add( pointLight );
+
+			}
+
+		} else {
+
+			// Inactive - remove from scene if it was there
+			if ( pooledLight != null && pooledLight.parent != null ) {
+
+				pooledLight.parent.remove( pooledLight );
+
+			}
 
 		}
 
 	}
-
-	return lights;
 
 }
 
@@ -226,7 +243,7 @@ export function R_MarkLights( light, bit, node, surfaces ) {
 R_PushDlights
 =============
 */
-export function R_PushDlights( cl, cl_dlights ) {
+export function R_PushDlights( cl ) {
 
 	if ( gl_flashblend.value )
 		return;
