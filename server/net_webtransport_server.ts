@@ -9,6 +9,15 @@ import { net_message } from '../src/net.js';
 let serverPort = 4433;
 let certFile = 'cert.pem';
 let keyFile = 'key.pem';
+let directMode = false; // Skip lobby protocol, accept game connections directly
+
+/**
+ * Set direct mode (skip lobby protocol)
+ * Used by room servers that accept connections directly
+ */
+export function WT_SetDirectMode(enabled: boolean): void {
+	directMode = enabled;
+}
 
 // Callback for map changes when joining rooms
 let _mapChangeCallback: ((mapName: string) => Promise<void>) | null = null;
@@ -36,6 +45,7 @@ interface ClientConnection {
 	connected: boolean;
 	address: string;
 	lastMessageTime: number;
+	roomId: string | null;  // Track which room this client is in
 }
 
 // Socket structure compatible with Quake's qsocket_t
@@ -264,6 +274,7 @@ async function _handleWebTransportSession(wt: WebTransport, address: string): Pr
 			connected: true,
 			address: address,
 			lastMessageTime: Date.now(),
+			roomId: null,
 		};
 
 		// Accept the first bidirectional stream (reliable channel)
@@ -368,6 +379,7 @@ async function _handleNewConnection(conn: any): Promise<void> {
 			connected: true,
 			address: address,
 			lastMessageTime: Date.now(),
+			roomId: null,
 		};
 
 		// Accept the first bidirectional stream (reliable channel)
@@ -513,6 +525,10 @@ async function _handleLobbyProtocol(
 					return false;
 				}
 				Sys_Printf('Client joining room: ' + roomId + '\n');
+
+				// Track room membership and update player count
+				conn.roomId = roomId;
+				updateRoomPlayerCount(roomId, room.playerCount + 1);
 
 				// Check if we need to change map for this room
 				if (_mapChangeCallback != null && _getCurrentMap != null) {
@@ -981,6 +997,15 @@ export function WT_Close(sock: QSocket): void {
 	if (!conn) return;
 
 	conn.connected = false;
+
+	// Decrement player count if client was in a room
+	if (conn.roomId) {
+		const room = getRoom(conn.roomId);
+		if (room && room.playerCount > 0) {
+			updateRoomPlayerCount(conn.roomId, room.playerCount - 1);
+		}
+		conn.roomId = null;
+	}
 
 	try {
 		if (conn.reliableWriter) {
