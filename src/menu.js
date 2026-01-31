@@ -1073,6 +1073,10 @@ function M_LanConfig_Key( key ) {
 				const serverUrl = params.get( 'server' ) || DEFAULT_WT_SERVER;
 				const connectUrl = serverUrl + '?room=' + encodeURIComponent( room.id );
 
+				// Update browser URL so user can share it
+				const shareUrl = window.location.origin + window.location.pathname + '?room=' + room.id;
+				history.replaceState( null, '', shareUrl );
+
 				// Set up error return
 				m_return_state = m_state;
 				m_return_onerror = true;

@@ -209,6 +209,13 @@ export function CL_Disconnect() {
 	cls.demoplayback = cls.timedemo = false;
 	cls.signon = 0;
 
+	// Clear room from browser URL on disconnect
+	if ( typeof window !== 'undefined' && window.location.search.includes( 'room=' ) ) {
+
+		history.replaceState( null, '', window.location.pathname );
+
+	}
+
 }
 
 export function CL_Disconnect_f() {
@@ -297,6 +304,28 @@ export async function CL_EstablishConnection( host ) {
 	}
 
 	Con_DPrintf( 'CL_EstablishConnection: connected to %s\n', host );
+
+	// Update browser URL with room ID for sharing
+	if ( typeof window !== 'undefined' && host.includes( '?room=' ) ) {
+
+		try {
+
+			const url = new URL( host );
+			const roomId = url.searchParams.get( 'room' );
+			if ( roomId ) {
+
+				const shareUrl = window.location.origin + window.location.pathname + '?room=' + roomId;
+				history.replaceState( null, '', shareUrl );
+
+			}
+
+		} catch ( e ) {
+
+			// Ignore URL parsing errors
+
+		}
+
+	}
 
 	cls.demonum = - 1; // not in the demo loop now
 	cls.state = ca_connected;
