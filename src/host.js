@@ -23,7 +23,7 @@ import { Key_Init } from './keys.js';
 import { Con_Init, Con_SetExternals } from './console.js';
 import { M_Init, M_SetExternals } from './menu.js';
 import { PR_Init, ED_NewString } from './pr_edict.js';
-import { Mod_Init } from './gl_model.js';
+import { Mod_Init, Mod_ClearAll } from './gl_model.js';
 import { NET_Init, NET_Poll, NET_Shutdown, WT_QueryRooms, WT_CreateRoom } from './net_main.js';
 import { SV_Init, SV_SpawnServer, SV_SaveSpawnparms, SV_CheckForNewClients, SV_ClearDatagram, SV_SendClientMessages, SV_WriteClientdataToMessage, SV_DropClient } from './sv_main.js';
 import { SV_RunClients } from './sv_user.js';
@@ -31,8 +31,7 @@ import { SV_Physics, SV_SetFrametime, FL_GODMODE, FL_NOTARGET,
 	MOVETYPE_WALK, MOVETYPE_FLY, MOVETYPE_NOCLIP } from './sv_phys.js';
 import { sv, svs, client_t, NUM_SPAWN_PARMS,
 	host_client, set_host_client } from './server.js';
-import { R_InitTextures } from './gl_rmisc.js';
-import { R_Init } from './gl_rmisc.js';
+import { R_InitTextures, R_Init, D_FlushCaches } from './gl_rmisc.js';
 import { VID_Init, VID_Shutdown } from './vid.js';
 import { Draw_Init, Draw_Character, Draw_String, Draw_ConsoleBackground, Draw_SetExternals, Draw_PicFromWad, Draw_CachePic, Draw_Pic, Draw_TransPic, Draw_Fill, Draw_FadeScreen } from './gl_draw.js';
 import { SCR_Init, SCR_UpdateScreen, SCR_SetExternals, SCR_EndLoadingPlaque, SCR_BeginLoadingPlaque } from './gl_screen.js';
@@ -128,6 +127,30 @@ function _GL_BeginRendering() {
 function _GL_EndRendering() {
 
 	// Three.js presents automatically at end of rAF callback
+
+}
+
+/*
+================
+Host_ClearMemory
+
+This clears all the memory used by both the client and server, but does
+not reinitialize anything.
+================
+*/
+export function Host_ClearMemory() {
+
+	Con_DPrintf( 'Clearing memory\n' );
+	D_FlushCaches();
+	Mod_ClearAll();
+
+	// JS doesn't have hunk memory to free (GC handles it)
+
+	cls.signon = 0;
+
+	// Clear sv and cl structures - in JS we reset key fields
+	// sv is reset in SV_SpawnServer via Object.assign
+	// cl is reset in CL_ClearState
 
 }
 

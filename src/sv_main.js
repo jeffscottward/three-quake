@@ -47,7 +47,7 @@ import {
 	NET_CanSendMessage, NET_SendToAll, NET_Close, NET_GetMessage
 } from './net_main.js';
 import { net_activeconnections, set_net_activeconnections } from './net.js';
-import { host_frametime, set_host_frametime, realtime } from './host.js';
+import { host_frametime, set_host_frametime, realtime, Host_ClearMemory } from './host.js';
 import { COM_LoadFile } from './pak.js';
 import { VectorCopy, VectorAdd, VectorSubtract, DotProduct } from './mathlib.js';
 import { Mod_ForName, Mod_LeafPVS } from './gl_model.js';
@@ -1202,7 +1202,7 @@ export function SV_SpawnServer( server ) {
 	//
 	// set up the new server
 	//
-	// Host_ClearMemory(); -- TODO: clear hunk etc.
+	Host_ClearMemory();
 
 	// clear the server struct
 	Object.assign( sv, new ( sv.constructor )() );
