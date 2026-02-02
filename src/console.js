@@ -349,8 +349,12 @@ export function Con_Print( txt ) {
 
 			Con_Linefeed();
 			// mark time for transparent overlay
-			if ( con_current >= 0 )
-				con_times[ con_current % NUM_CON_TIMES ] = _getRealtime();
+			if ( con_current >= 0 ) {
+				const rt = _getRealtime();
+				con_times[ con_current % NUM_CON_TIMES ] = rt;
+				// DEBUG: Log when timestamps are set
+				if ( rt > 1 ) console.log( '[ConTime] line', con_current, 'time', rt.toFixed(2) );
+			}
 
 		}
 
@@ -515,11 +519,14 @@ export function Con_DrawNotify() {
 
 	if ( ! _Draw_Character ) return;
 
-	// DEBUG: Always draw a test character at top-left to verify drawing works
-	_Draw_Character( 8, 0, 65 ); // 'A'
-
 	let v = 0;
 	const realtime = _getRealtime();
+
+	// DEBUG: Log once per second
+	if ( Math.floor( realtime ) !== Math.floor( realtime - 0.02 ) && realtime > 5 ) {
+		console.log( '[Notify] realtime', realtime.toFixed(2), 'con_current', con_current,
+			'times', Array.from( con_times ).map( t => t.toFixed( 1 ) ).join( ',' ) );
+	}
 
 	for ( let i = con_current - NUM_CON_TIMES + 1; i <= con_current; i ++ ) {
 
