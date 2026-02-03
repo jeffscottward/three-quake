@@ -57,16 +57,14 @@ let _realVid = { width: 640, height: 480 };
 const _vid = {
 	get width() {
 
-		const dpr = window.devicePixelRatio || 1;
 		const uiScale = Draw_GetUIScale();
-		return Math.floor( _realVid.width / ( dpr * uiScale ) );
+		return Math.floor( _realVid.width / uiScale );
 
 	},
 	get height() {
 
-		const dpr = window.devicePixelRatio || 1;
 		const uiScale = Draw_GetUIScale();
-		return Math.floor( _realVid.height / ( dpr * uiScale ) );
+		return Math.floor( _realVid.height / uiScale );
 
 	}
 };

@@ -90,18 +90,15 @@ Updates _uiScale and returns the virtual dimensions.
 */
 function _calculateUIScale() {
 
-	const dpr = window.devicePixelRatio || 1;
-	const cssWidth = Math.floor( _realVid.width / dpr );
-	const cssHeight = Math.floor( _realVid.height / dpr );
-
+	// _realVid.width/height are already in CSS pixels (window.innerWidth/Height)
 	// Calculate scale to achieve target virtual height
 	// Use floor to avoid fractional scaling (sharper pixels)
-	_uiScale = Math.max( 1, Math.floor( cssHeight / scr_conheight ) );
+	_uiScale = Math.max( 1, Math.floor( _realVid.height / scr_conheight ) );
 
 	// Return virtual dimensions
 	return {
-		width: Math.floor( cssWidth / _uiScale ),
-		height: Math.floor( cssHeight / _uiScale )
+		width: Math.floor( _realVid.width / _uiScale ),
+		height: Math.floor( _realVid.height / _uiScale )
 	};
 
 }
@@ -117,11 +114,8 @@ Minimum: 200, Maximum: screen height in CSS pixels.
 */
 export function SCR_SetConHeight( height ) {
 
-	const dpr = window.devicePixelRatio || 1;
-	const cssHeight = Math.floor( _realVid.height / dpr );
-
 	// Clamp to reasonable range
-	scr_conheight = Math.max( 200, Math.min( height, cssHeight ) );
+	scr_conheight = Math.max( 200, Math.min( height, _realVid.height ) );
 	_calculateUIScale();
 
 }
@@ -250,14 +244,12 @@ let _realVid = { width: 640, height: 480 };
 const _vid = {
 	get width() {
 
-		const dims = _calculateUIScale();
-		return dims.width;
+		return Math.floor( _realVid.width / _uiScale );
 
 	},
 	get height() {
 
-		const dims = _calculateUIScale();
-		return dims.height;
+		return Math.floor( _realVid.height / _uiScale );
 
 	},
 	get numpages() { return _realVid.numpages; }
@@ -455,12 +447,10 @@ export function Draw_BeginFrame() {
 		overlayCtx.setTransform( 1, 0, 0, 1, 0, 0 );
 		overlayCtx.clearRect( 0, 0, overlayCanvas.width, overlayCanvas.height );
 
-		// Apply combined DPR + UI scale transform
-		// This maps virtual coordinates to physical canvas pixels
-		const dpr = window.devicePixelRatio || 1;
+		// Apply UI scale transform
+		// This maps virtual coordinates to canvas pixels
 		_calculateUIScale();
-		const totalScale = dpr * _uiScale;
-		overlayCtx.setTransform( totalScale, 0, 0, totalScale, 0, 0 );
+		overlayCtx.setTransform( _uiScale, 0, 0, _uiScale, 0, 0 );
 
 		// Disable image smoothing for crisp pixels
 		overlayCtx.imageSmoothingEnabled = false;
