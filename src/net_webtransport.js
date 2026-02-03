@@ -35,8 +35,7 @@ class WebTransportConnection {
 		this.reliableStream = null;
 		this.reliableWriter = null;
 		this.reliableReader = null;
-		this.datagramWriter = null;
-		this.datagramReader = null;
+		// QUIC datagrams are NOT used — all messages go over the bidirectional stream
 		this.pendingMessages = []; // { reliable: boolean, data: Uint8Array }
 		this.connected = false;
 		this.error = null;
@@ -681,9 +680,8 @@ export async function WT_Connect( host ) {
 
 		}
 
-		// Set up datagram streams for unreliable messages
-		conn.datagramWriter = transport.datagrams.writable.getWriter();
-		conn.datagramReader = transport.datagrams.readable.getReader();
+		// QUIC datagrams are NOT used due to a Deno server bug that causes event loop freeze.
+		// All messages (reliable type=1, unreliable type=2) go over the bidirectional stream.
 
 		// Store connection
 		sock.driverdata = conn;
@@ -782,9 +780,8 @@ async function _WT_ConnectDirect( url, originalHost ) {
 		// Room servers in direct mode don't need lobby protocol
 		// Just set up the connection and let the game proceed
 
-		// Set up datagram streams for unreliable messages
-		conn.datagramWriter = transport.datagrams.writable.getWriter();
-		conn.datagramReader = transport.datagrams.readable.getReader();
+		// QUIC datagrams are NOT used due to a Deno server bug that causes event loop freeze.
+		// All messages (reliable type=1, unreliable type=2) go over the bidirectional stream.
 
 		// Store connection
 		sock.driverdata = conn;
@@ -845,17 +842,21 @@ Start background tasks to read from reliable stream and datagrams
 */
 function _WT_StartBackgroundReaders( sock, conn ) {
 
-	// Read reliable messages in background
+	// Read all messages from the bidirectional stream.
+	// QUIC datagrams are NOT used due to a Deno server bug that causes event loop freeze.
+	// Both reliable (type=1) and unreliable (type=2) messages come through the stream.
 	( async () => {
 
 		try {
 
 			while ( conn.connected ) {
 
-				const msg = await _WT_ReadFramedMessage( conn.reliableReader );
-				if ( ! msg ) break;
+				const msg = await _WT_ReadFramedMessageWithType( conn.reliableReader );
+				if ( msg === null ) break;
 
-				conn.pendingMessages.push( { reliable: true, data: msg } );
+				// type=1 is reliable, type=2 is unreliable
+				const isReliable = msg.type !== 2;
+				conn.pendingMessages.push( { reliable: isReliable, data: msg.data } );
 
 			}
 
@@ -863,36 +864,8 @@ function _WT_StartBackgroundReaders( sock, conn ) {
 
 			if ( conn.connected ) {
 
-				Con_DPrintf( 'Reliable reader error: ' + error.message + '\n' );
+				Con_DPrintf( 'Stream reader error: ' + error.message + '\n' );
 				conn.error = error;
-
-			}
-
-		}
-
-	} )();
-
-	// Read datagrams in background
-	( async () => {
-
-		Con_DPrintf( 'Client datagram reader started\n' );
-
-		try {
-
-			while ( conn.connected ) {
-
-				const { value, done } = await conn.datagramReader.read();
-				if ( done ) break;
-
-				conn.pendingMessages.push( { reliable: false, data: value } );
-
-			}
-
-		} catch ( error ) {
-
-			if ( conn.connected ) {
-
-				Con_DPrintf( 'Datagram reader error: ' + error.message + '\n' );
 
 			}
 
@@ -1151,7 +1124,8 @@ export function WT_QSendMessage( sock, data ) {
 =============
 WT_SendUnreliableMessage
 
-Send an unreliable message via datagrams
+Send an unreliable message over the bidirectional stream with type=2.
+QUIC datagrams are NOT used due to a Deno server bug that causes event loop freeze.
 =============
 */
 export function WT_SendUnreliableMessage( sock, data ) {
@@ -1172,25 +1146,27 @@ export function WT_SendUnreliableMessage( sock, data ) {
 
 	}
 
-	if ( ! conn.datagramWriter ) {
+	if ( ! conn.reliableWriter ) {
 
-		Con_DPrintf( 'WT_SendUnreliableMessage: no datagramWriter\n' );
+		Con_DPrintf( 'WT_SendUnreliableMessage: no reliableWriter\n' );
 		return - 1;
 
 	}
 
-	// Copy the data (datagrams don't need framing, they're already atomic)
-	const dgram = new Uint8Array( data.cursize );
-	dgram.set( data.data.subarray( 0, data.cursize ) );
+	// Frame as [type=2][length:2][data:N] and send on the bidirectional stream
+	const frame = new Uint8Array( 3 + data.cursize );
+	frame[ 0 ] = 2; // unreliable type
+	frame[ 1 ] = data.cursize & 0xff;
+	frame[ 2 ] = ( data.cursize >> 8 ) & 0xff;
+	frame.set( data.data.subarray( 0, data.cursize ), 3 );
 
-	// Debug: log first byte (should be clc_move = 3)
-	// Con_DPrintf( 'WT_SendUnreliableMessage: sending %d bytes, cmd=%d\n', data.cursize, dgram[ 0 ] );
+	// Send asynchronously
+	conn.reliableWriter.write( frame ).then( () => {
 
-	// Send asynchronously - for datagrams, individual failures are expected
-	// so we only mark the connection dead for persistent errors
-	conn.datagramWriter.write( dgram ).catch( ( error ) => {
+		// Success
 
-		// Datagram write failures happen when connection is dead
+	} ).catch( ( error ) => {
+
 		Con_Printf( 'WT_SendUnreliableMessage: write failed: ' + error.message + '\n' );
 		conn.error = error;
 		conn.connected = false;
@@ -1249,16 +1225,10 @@ export function WT_Close( sock ) {
 
 	try {
 
-		// Close writers
+		// Close writer
 		if ( conn.reliableWriter ) {
 
 			conn.reliableWriter.close().catch( () => {} );
-
-		}
-
-		if ( conn.datagramWriter ) {
-
-			conn.datagramWriter.close().catch( () => {} );
 
 		}
 

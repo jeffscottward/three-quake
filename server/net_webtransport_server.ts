@@ -19,13 +19,14 @@ export function WT_SetMapCallbacks(
 export function WT_SetMaxClientsCallback(_setMaxClients: (maxClients: number) => void): void {}
 
 // Connection tracking
+// All messages (reliable and unreliable) go over the bidirectional stream.
+// QUIC datagrams are NOT used due to a Deno bug that causes event loop freeze.
 interface ClientConnection {
 	id: number;
 	webTransport: WebTransport;
 	bidirectionalStream: { readable: ReadableStream<Uint8Array>; writable: WritableStream<Uint8Array> } | null;
 	reliableWriter: WritableStreamDefaultWriter<Uint8Array> | null;
 	reliableReader: ReadableStreamDefaultReader<Uint8Array> | null;
-	datagramWriter: WritableStreamDefaultWriter<Uint8Array> | null;  // Cached datagram writer
 	pendingMessages: Array<{ reliable: boolean; data: Uint8Array }>;
 	connected: boolean;
 	address: string;
@@ -76,6 +77,17 @@ let nextConnectionId = 1;
 let net_driverlevel = 0;
 
 const NET_MAXMESSAGE = 8192;
+
+// Maximum pending messages per connection before we consider it dead/flooding.
+// The game loop consumes messages at 20Hz — if hundreds pile up, something is wrong.
+const MAX_PENDING_MESSAGES = 100;
+
+// Helper: yield to the macrotask queue so setInterval (game loop) can run.
+// Without this, a tight await loop (resolved promises) floods the microtask queue
+// and starves macrotasks, freezing the game loop entirely.
+function _yieldToMacrotasks(): Promise<void> {
+	return new Promise(resolve => setTimeout(resolve, 0));
+}
 
 // Callback for socket allocation (injected from game_server.js)
 // This allows using the shared socket pool from net_main.js
@@ -235,7 +247,6 @@ async function _handleWebTransportSession(wt: WebTransport, address: string): Pr
 			bidirectionalStream: null,
 			reliableWriter: null,
 			reliableReader: null,
-			datagramWriter: null,  // Cached datagram writer - initialized on first send
 			pendingMessages: [],
 			connected: true,
 			address: address,
@@ -271,6 +282,7 @@ async function _handleWebTransportSession(wt: WebTransport, address: string): Pr
 		sock.lastMessageTime = Date.now() / 1000;
 
 		pendingConnections.push(sock);
+
 		_startBackgroundReaders(sock, clientConn);
 
 		wt.closed.then(() => {
@@ -286,28 +298,41 @@ async function _handleWebTransportSession(wt: WebTransport, address: string): Pr
 }
 
 /**
- * Start background readers for reliable stream and datagrams
+ * Start background reader for reliable stream.
+ * Datagrams use pull-based reading (triggered by WT_QGetMessage) instead of
+ * a background loop, to avoid event loop starvation from Deno's QUIC internals.
  */
 function _startBackgroundReaders(
 	sock: QSocket,
 	conn: ClientConnection
 ): void {
-	// Read reliable messages
+	// Read all messages from the bidirectional stream (both reliable type=1 and unreliable type=2)
+	// QUIC datagrams are NOT used due to a Deno bug that causes event loop freeze.
+	// All messages go through the stream with framing: [type:1][length:2][data:N]
 	(async () => {
 		try {
 			while (conn.connected && conn.reliableReader) {
 				const msg = await _readFramedMessage(conn.reliableReader);
-				if (!msg) break;
+				if (msg === null) break;
 
-				// Push just the data, not the frame type (game code expects raw message data)
-				conn.pendingMessages.push({ reliable: true, data: msg.data });
+				// type=1 is reliable, type=2 is unreliable (sent over stream to avoid QUIC datagram bug)
+				const isReliable = msg.type !== 2;
+				conn.pendingMessages.push({ reliable: isReliable, data: msg.data });
 				conn.lastMessageTime = Date.now();
+
+				// Yield to macrotask queue to prevent microtask starvation.
+				await _yieldToMacrotasks();
+
+				// If messages are piling up, the game loop isn't consuming them
+				if (conn.pendingMessages.length > MAX_PENDING_MESSAGES) {
+					Sys_Printf('Stream reader: %d pending messages for %s, disconnecting\n', conn.pendingMessages.length, conn.address);
+					conn.connected = false;
+					break;
+				}
 			}
 		} catch (error) {
 			if (conn.connected) {
-				Sys_Printf('Reliable reader error for %s: %s\n', conn.address, String(error));
-				// Only set conn.connected = false, NOT sock.disconnected
-				// sock.disconnected is managed by the Quake network layer via SV_DropClient -> NET_Close
+				Sys_Printf('Stream reader error for %s: %s\n', conn.address, String(error));
 				conn.connected = false;
 			}
 		}
@@ -315,22 +340,6 @@ function _startBackgroundReaders(
 		try {
 			conn.reliableReader?.releaseLock();
 		} catch { /* ignore */ }
-	})();
-
-	// Read datagrams (unreliable)
-	(async () => {
-		try {
-			const reader = conn.webTransport.datagrams.readable.getReader();
-			while (conn.connected) {
-				const { value, done } = await reader.read();
-				if (done) break;
-				conn.pendingMessages.push({ reliable: false, data: value });
-				conn.lastMessageTime = Date.now();
-			}
-			reader.releaseLock();
-		} catch {
-			// Datagram reader ended - normal on disconnect
-		}
 	})();
 }
 
@@ -578,7 +587,7 @@ export function WT_CheckNewConnections(): QSocket | null {
  */
 export function WT_QGetMessage(sock: QSocket): number {
 	const conn = sock.driverdata;
-	if (!conn) return -1;
+	if (conn === null) return -1;
 
 	if (!conn.connected && conn.pendingMessages.length === 0) {
 		return -1;
@@ -618,7 +627,7 @@ export function WT_QGetMessage(sock: QSocket): number {
 }
 
 /**
- * Send a reliable message
+ * Send a reliable message.
  */
 export function WT_QSendMessage(
 	sock: QSocket,
@@ -629,18 +638,15 @@ export function WT_QSendMessage(
 		return -1;
 	}
 
-	// Frame the message
+	// Frame the message: [type=1][length:2][data:N]
 	const frame = new Uint8Array(3 + data.cursize);
 	frame[0] = 1; // reliable type
 	frame[1] = data.cursize & 0xff;
 	frame[2] = (data.cursize >> 8) & 0xff;
 	frame.set(data.data.subarray(0, data.cursize), 3);
 
-	// Send asynchronously
 	conn.reliableWriter.write(frame).catch((err) => {
 		Sys_Printf('WT_QSendMessage: write FAILED: %s\n', (err as Error).message);
-		// Only set conn.connected = false, NOT sock.disconnected
-		// sock.disconnected is managed by the Quake network layer via SV_DropClient -> NET_Close
 		conn.connected = false;
 	});
 
@@ -648,27 +654,25 @@ export function WT_QSendMessage(
 }
 
 /**
- * Send an unreliable message via datagrams
+ * Send an unreliable message over the bidirectional stream with type=2.
+ * QUIC datagrams are NOT used due to a Deno bug that causes event loop freeze.
  */
 export function WT_SendUnreliableMessage(
 	sock: QSocket,
 	data: { data: Uint8Array; cursize: number }
 ): number {
 	const conn = sock.driverdata;
-	if (!conn || !conn.connected) return -1;
+	if (!conn || !conn.connected || !conn.reliableWriter) return -1;
 
-	// Copy the data
-	const dgram = new Uint8Array(data.cursize);
-	dgram.set(data.data.subarray(0, data.cursize));
+	// Frame the message: [type=2][length:2][data:N]
+	const frame = new Uint8Array(3 + data.cursize);
+	frame[0] = 2; // unreliable type
+	frame[1] = data.cursize & 0xff;
+	frame[2] = (data.cursize >> 8) & 0xff;
+	frame.set(data.data.subarray(0, data.cursize), 3);
 
-	// Get or create cached datagram writer (avoids creating new writer every frame at 72Hz)
-	if (conn.datagramWriter === null) {
-		conn.datagramWriter = conn.webTransport.datagrams.writable.getWriter();
-	}
-
-	// Send via datagram
-	conn.datagramWriter.write(dgram).catch(() => {
-		// Silently fail - datagrams are unreliable by design
+	conn.reliableWriter.write(frame).catch(() => {
+		// Unreliable — silently fail
 	});
 
 	return 1;
@@ -700,14 +704,10 @@ export function WT_Close(sock: QSocket): void {
 	conn.connected = false;
 
 	try {
-		// Close cached writers
+		// Close writer and reader
 		if (conn.reliableWriter) {
 			conn.reliableWriter.close().catch(() => {});
 			conn.reliableWriter = null;
-		}
-		if (conn.datagramWriter) {
-			conn.datagramWriter.close().catch(() => {});
-			conn.datagramWriter = null;
 		}
 		conn.webTransport.close();
 	} catch {
