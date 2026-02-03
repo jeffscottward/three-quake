@@ -454,9 +454,9 @@ function onTouchEnd( e ) {
 =================
 Gyroscope support
 
-Uses deviceorientation with delta tracking. In landscape mode:
-- gamma (-90 to 90) changes when tilting left/right = yaw
-- beta (-180 to 180) changes when tilting up/down = pitch
+Uses deviceorientation with delta tracking. In fullscreen landscape:
+- beta changes when tilting left/right = yaw
+- gamma changes when tilting up/down = pitch
 =================
 */
 
@@ -479,11 +479,11 @@ function onDeviceOrientation( e ) {
 		// Delta for gamma (no wraparound needed, range is -90 to 90)
 		let dGamma = gamma - prevGamma;
 
-		// In landscape mode:
-		// - tilting phone left/right changes gamma = yaw
-		// - tilting phone up/down changes beta = pitch
-		lookDeltaX += dGamma * GYRO_SENSITIVITY;
-		lookDeltaY -= dBeta * GYRO_SENSITIVITY;
+		// In fullscreen landscape, device axes are swapped:
+		// - tilting phone up/down changes gamma = yaw
+		// - tilting phone left/right changes beta = pitch
+		lookDeltaX += dBeta * GYRO_SENSITIVITY;
+		lookDeltaY -= dGamma * GYRO_SENSITIVITY;
 
 	}
 
