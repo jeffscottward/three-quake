@@ -30,6 +30,13 @@ let lookDeltaX = 0;
 let lookDeltaY = 0;
 let jumpImpulse = false;
 
+// Gyroscope state
+let gyroEnabled = false;
+let gyroPermissionRequested = false;
+let prevAlpha = null;
+let prevBeta = null;
+const GYRO_SENSITIVITY = 0.4;
+
 // UI elements
 let overlay = null;
 let joystickArea = null;
@@ -276,6 +283,13 @@ function onTouchStart( e ) {
 	// Unlock audio on first user gesture
 	S_UnlockAudio();
 
+	// Request gyroscope permission on first touch (needs user gesture)
+	if ( ! gyroPermissionRequested ) {
+
+		Gyro_RequestPermission();
+
+	}
+
 	// Debug: log which element received the touch
 	console.log( 'Touch start on:', e.currentTarget === joystickArea ? 'joystickArea' :
 		e.currentTarget === lookArea ? 'lookArea' :
@@ -432,6 +446,102 @@ function onTouchEnd( e ) {
 		}
 
 	}
+
+}
+
+/*
+=================
+Gyroscope support
+=================
+*/
+
+function onDeviceOrientation( e ) {
+
+	if ( ! enabled ) return;
+
+	const alpha = e.alpha; // Z-axis: 0-360
+	const beta = e.beta;   // X-axis: -180 to 180
+
+	if ( alpha === null || beta === null ) return;
+
+	if ( prevAlpha !== null && prevBeta !== null ) {
+
+		// Calculate alpha delta with wraparound handling (0<->360)
+		let dAlpha = alpha - prevAlpha;
+		if ( dAlpha > 180 ) dAlpha -= 360;
+		if ( dAlpha < - 180 ) dAlpha += 360;
+
+		let dBeta = beta - prevBeta;
+		if ( dBeta > 180 ) dBeta -= 360;
+		if ( dBeta < - 180 ) dBeta += 360;
+
+		// In landscape, alpha rotation maps to yaw, beta to pitch
+		// Scale by sensitivity to keep it subtle
+		lookDeltaX += dAlpha * GYRO_SENSITIVITY;
+		lookDeltaY += dBeta * GYRO_SENSITIVITY;
+
+	}
+
+	prevAlpha = alpha;
+	prevBeta = beta;
+
+}
+
+async function Gyro_RequestPermission() {
+
+	if ( gyroPermissionRequested ) return;
+	gyroPermissionRequested = true;
+
+	// iOS 13+ requires explicit permission request from a user gesture
+	if ( typeof DeviceOrientationEvent !== 'undefined' &&
+		typeof DeviceOrientationEvent.requestPermission === 'function' ) {
+
+		try {
+
+			const permission = await DeviceOrientationEvent.requestPermission();
+			if ( permission === 'granted' ) {
+
+				Gyro_Enable();
+
+			} else {
+
+				console.log( 'Gyroscope permission denied' );
+
+			}
+
+		} catch ( err ) {
+
+			console.log( 'Gyroscope permission error:', err.message );
+
+		}
+
+	} else {
+
+		// Android and older iOS - no permission needed
+		Gyro_Enable();
+
+	}
+
+}
+
+function Gyro_Enable() {
+
+	if ( gyroEnabled ) return;
+	gyroEnabled = true;
+	prevAlpha = null;
+	prevBeta = null;
+	window.addEventListener( 'deviceorientation', onDeviceOrientation );
+	console.log( 'Gyroscope aiming enabled' );
+
+}
+
+function Gyro_Disable() {
+
+	if ( ! gyroEnabled ) return;
+	gyroEnabled = false;
+	prevAlpha = null;
+	prevBeta = null;
+	window.removeEventListener( 'deviceorientation', onDeviceOrientation );
 
 }
 
@@ -596,6 +706,13 @@ export function Touch_Enable() {
 
 	pauseButton.addEventListener( 'touchstart', onTouchStart, { passive: false } );
 
+	// Enable gyroscope if permission was already granted
+	if ( gyroPermissionRequested ) {
+
+		Gyro_Enable();
+
+	}
+
 }
 
 /*
@@ -632,6 +749,9 @@ export function Touch_Disable() {
 	jumpButton.removeEventListener( 'touchcancel', onTouchEnd );
 
 	pauseButton.removeEventListener( 'touchstart', onTouchStart );
+
+	// Disable gyroscope while controls are off
+	Gyro_Disable();
 
 	// Reset state
 	moveTouch = null;
