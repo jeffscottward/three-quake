@@ -71,6 +71,10 @@ function CL_ParseBeam( m ) {
 	end[ 1 ] = MSG_ReadCoord();
 	end[ 2 ] = MSG_ReadCoord();
 
+	// Use server time (cl.mtime[0]) for beam timing to avoid mismatch with
+	// client-side prediction which modifies cl.time
+	const serverTime = cl.mtime[ 0 ];
+
 	// override any beam with the same entity
 	for ( let i = 0; i < MAX_BEAMS; i ++ ) {
 
@@ -79,7 +83,7 @@ function CL_ParseBeam( m ) {
 
 			b.entity = ent;
 			b.model = m;
-			b.endtime = cl.time + 0.2;
+			b.endtime = serverTime + 0.2;
 			VectorCopy( start, b.start );
 			VectorCopy( end, b.end );
 			return;
@@ -88,15 +92,15 @@ function CL_ParseBeam( m ) {
 
 	}
 
-	// find a free beam
+	// find a free beam (fix Golden Rule #2: use explicit null check)
 	for ( let i = 0; i < MAX_BEAMS; i ++ ) {
 
 		const b = cl_beams[ i ];
-		if ( ! b.model || b.endtime < cl.time ) {
+		if ( b.model == null || b.endtime < serverTime ) {
 
 			b.entity = ent;
 			b.model = m;
-			b.endtime = cl.time + 0.2;
+			b.endtime = serverTime + 0.2;
 			VectorCopy( start, b.start );
 			VectorCopy( end, b.end );
 			return;
@@ -309,11 +313,16 @@ export function CL_UpdateTEnts() {
 
 	num_temp_entities = 0;
 
+	// Use server time (cl.mtime[0]) for beam expiration to match CL_ParseBeam
+	// which also uses server time. This avoids mismatch with client-side prediction.
+	const serverTime = cl.mtime[ 0 ];
+
 	// update lightning
 	for ( let i = 0; i < MAX_BEAMS; i ++ ) {
 
 		const b = cl_beams[ i ];
-		if ( ! b.model || b.endtime < cl.time )
+		// Fix Golden Rule #2: use explicit null check instead of falsy check
+		if ( b.model == null || b.endtime < serverTime )
 			continue;
 
 		// if coming from the player, update the start position
