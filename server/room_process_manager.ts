@@ -169,8 +169,18 @@ export async function RoomManager_CreateRoom( config: {
 		};
 		roomProcesses.set( id, roomInfo );
 
+		// Create a promise that resolves when we detect the server is listening
+		// This is much more robust than a fixed timeout
+		const STARTUP_TIMEOUT_MS = 15000;
+		let serverReadyResolve: ( () => void ) | null = null;
+		let serverReadyReject: ( ( err: Error ) => void ) | null = null;
+		const serverReadyPromise = new Promise<void>( ( resolve, reject ) => {
+			serverReadyResolve = resolve;
+			serverReadyReject = reject;
+		} );
+
 		// Pipe stdout/stderr to main server console with prefix
-		// Also parse heartbeat messages to track player count
+		// Also detect when server is ready and parse heartbeat messages
 		( async () => {
 			const reader = process.stdout.getReader();
 			const decoder = new TextDecoder();
@@ -182,6 +192,15 @@ export async function RoomManager_CreateRoom( config: {
 					for ( const line of text.split( '\n' ) ) {
 						if ( line.trim() !== '' ) {
 							Sys_Printf( '[Room %s] %s\n', id, line );
+
+							// Detect when WebTransport server is actually listening
+							// This is the signal that clients can now connect
+							if ( line.includes( 'WebTransport server listening' ) ) {
+								if ( serverReadyResolve !== null ) {
+									serverReadyResolve();
+									serverReadyResolve = null;
+								}
+							}
 
 							// Parse heartbeat messages: "[Heartbeat] time=X frames=Y players=Z"
 							const heartbeatMatch = line.match( /\[Heartbeat\].*players=(\d+)/ );
@@ -216,6 +235,10 @@ export async function RoomManager_CreateRoom( config: {
 					}
 				}
 			} catch { /* ignore */ }
+			// If stdout closes without seeing "listening", reject the promise
+			if ( serverReadyResolve !== null && serverReadyReject !== null ) {
+				serverReadyReject( new Error( 'Process stdout closed before server was ready' ) );
+			}
 		} )();
 
 		( async () => {
@@ -240,10 +263,28 @@ export async function RoomManager_CreateRoom( config: {
 			Sys_Printf( 'Room %s process exited with code %d\n', id, status.code );
 			usedPorts.delete( port );
 			roomProcesses.delete( id );
+			// If process exits before ready, reject
+			if ( serverReadyReject !== null ) {
+				serverReadyReject( new Error( 'Process exited with code ' + status.code ) );
+			}
 		} );
 
-		// Wait a moment for the server to start
-		await new Promise( resolve => setTimeout( resolve, 500 ) );
+		// Wait for the server to signal it's ready (or timeout)
+		const timeoutPromise = new Promise<never>( ( _, reject ) => {
+			setTimeout( () => reject( new Error( 'Server startup timeout' ) ), STARTUP_TIMEOUT_MS );
+		} );
+
+		try {
+			await Promise.race( [ serverReadyPromise, timeoutPromise ] );
+		} catch ( startupError ) {
+			Sys_Printf( 'Room %s failed to start: %s\n', id, ( startupError as Error ).message );
+			try {
+				process.kill( 'SIGTERM' );
+			} catch { /* process may have already exited */ }
+			usedPorts.delete( port );
+			roomProcesses.delete( id );
+			return null;
+		}
 
 		Sys_Printf( 'Room %s created successfully on port %d\n', id, port );
 
