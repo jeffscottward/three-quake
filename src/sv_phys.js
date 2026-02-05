@@ -117,6 +117,35 @@ const _pushmove_moved_from = [];
 for ( let i = 0; i < MAX_EDICTS; i ++ )
 	_pushmove_moved_from[ i ] = new Float32Array( 3 );
 
+// Cached buffers for SV_CheckStuck (Golden Rule #4)
+const _checkstuck_org = new Float32Array( 3 );
+
+// Cached buffers for SV_CheckWater (Golden Rule #4)
+const _checkwater_point = new Float32Array( 3 );
+
+// Cached buffers for SV_WallFriction (Golden Rule #4)
+const _wallfriction_forward = new Float32Array( 3 );
+const _wallfriction_right = new Float32Array( 3 );
+const _wallfriction_up = new Float32Array( 3 );
+const _wallfriction_into = new Float32Array( 3 );
+const _wallfriction_side = new Float32Array( 3 );
+
+// Cached buffers for SV_TryUnstick (Golden Rule #4)
+const _tryunstick_oldorg = new Float32Array( 3 );
+const _tryunstick_dir = new Float32Array( 3 );
+const _tryunstick_steptrace = {};
+
+// Cached buffers for SV_WalkMove (Golden Rule #4)
+const _walkmove_upmove = new Float32Array( 3 );
+const _walkmove_downmove = new Float32Array( 3 );
+const _walkmove_oldorg = new Float32Array( 3 );
+const _walkmove_oldvel = new Float32Array( 3 );
+const _walkmove_nosteporg = new Float32Array( 3 );
+const _walkmove_nostepvel = new Float32Array( 3 );
+
+// Cached buffer for SV_Physics_Toss (Golden Rule #4)
+const _toss_move = new Float32Array( 3 );
+
 // Cached buffers for SV_PushRotate (Golden Rule #4)
 const _pushrotate_amove = new Float32Array( 3 );
 const _pushrotate_a = new Float32Array( 3 );
@@ -940,7 +969,7 @@ clipping hull.
 */
 export function SV_CheckStuck( ent ) {
 
-	const org = new Float32Array( 3 );
+	const org = _checkstuck_org;
 
 	if ( ! SV_TestEntityPosition( ent ) ) {
 
@@ -988,7 +1017,7 @@ SV_CheckWater
 */
 export function SV_CheckWater( ent ) {
 
-	const point = new Float32Array( 3 );
+	const point = _checkwater_point;
 
 	point[ 0 ] = ent.v.origin[ 0 ];
 	point[ 1 ] = ent.v.origin[ 1 ];
@@ -1026,11 +1055,11 @@ SV_WallFriction
 */
 function SV_WallFriction( ent, trace ) {
 
-	const forward = new Float32Array( 3 );
-	const right = new Float32Array( 3 );
-	const up = new Float32Array( 3 );
-	const into = new Float32Array( 3 );
-	const side = new Float32Array( 3 );
+	const forward = _wallfriction_forward;
+	const right = _wallfriction_right;
+	const up = _wallfriction_up;
+	const into = _wallfriction_into;
+	const side = _wallfriction_side;
 
 	AngleVectors( ent.v.v_angle, forward, right, up );
 	let d = DotProduct( trace.plane.normal, forward );
@@ -1063,9 +1092,9 @@ This is a hack, but in the interest of good gameplay...
 */
 export function SV_TryUnstick( ent, oldvel ) {
 
-	const oldorg = new Float32Array( 3 );
-	const dir = new Float32Array( 3 );
-	const steptrace = {};
+	const oldorg = _tryunstick_oldorg;
+	const dir = _tryunstick_dir;
+	const steptrace = _tryunstick_steptrace;
 
 	VectorCopy( ent.v.origin, oldorg );
 	VectorCopy( vec3_origin, dir );
@@ -1120,13 +1149,13 @@ Only used by players
 */
 export function SV_WalkMove( ent ) {
 
-	const upmove = new Float32Array( 3 );
-	const downmove = new Float32Array( 3 );
-	const oldorg = new Float32Array( 3 );
-	const oldvel = new Float32Array( 3 );
-	const nosteporg = new Float32Array( 3 );
-	const nostepvel = new Float32Array( 3 );
-	let steptrace = new trace_t();
+	const upmove = _walkmove_upmove;
+	const downmove = _walkmove_downmove;
+	const oldorg = _walkmove_oldorg;
+	const oldvel = _walkmove_oldvel;
+	const nosteporg = _walkmove_nosteporg;
+	const nostepvel = _walkmove_nostepvel;
+	let steptrace = {};
 
 	//
 	// do a regular slide move unless it looks like you ran into a step
@@ -1174,7 +1203,7 @@ export function SV_WalkMove( ent ) {
 	ent.v.velocity[ 0 ] = oldvel[ 0 ];
 	ent.v.velocity[ 1 ] = oldvel[ 1 ];
 	ent.v.velocity[ 2 ] = 0;
-	steptrace = new trace_t();
+	steptrace = {};
 	clip = SV_FlyMove( ent, host_frametime, steptrace );
 
 	// check for stuckness, possibly due to the limited precision of floats
@@ -1418,7 +1447,7 @@ Toss, bounce, and fly movement. When onground, do nothing.
 */
 export function SV_Physics_Toss( ent ) {
 
-	const move = new Float32Array( 3 );
+	const move = _toss_move;
 
 	// regular thinking
 	if ( ! SV_RunThink( ent ) )

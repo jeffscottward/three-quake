@@ -430,23 +430,23 @@ export function PR_ExecuteProgram( fnum ) {
 				gf[ stC ] = gf[ stA ] < gf[ stB ] ? 1 : 0;
 				break;
 			case OP_AND:
-				gf[ stC ] = ( gf[ stA ] && gf[ stB ] ) ? 1 : 0;
+				gf[ stC ] = ( gf[ stA ] !== 0 && gf[ stB ] !== 0 ) ? 1 : 0;
 				break;
 			case OP_OR:
-				gf[ stC ] = ( gf[ stA ] || gf[ stB ] ) ? 1 : 0;
+				gf[ stC ] = ( gf[ stA ] !== 0 || gf[ stB ] !== 0 ) ? 1 : 0;
 				break;
 
 			case OP_NOT_F:
-				gf[ stC ] = ! gf[ stA ] ? 1 : 0;
+				gf[ stC ] = ( gf[ stA ] === 0 ) ? 1 : 0;
 				break;
 			case OP_NOT_V:
-				gf[ stC ] = ( ! gf[ stA ] && ! gf[ stA + 1 ] && ! gf[ stA + 2 ] ) ? 1 : 0;
+				gf[ stC ] = ( gf[ stA ] === 0 && gf[ stA + 1 ] === 0 && gf[ stA + 2 ] === 0 ) ? 1 : 0;
 				break;
 			case OP_NOT_S:
-				gf[ stC ] = ( ! gi[ stA ] || ! pr_strings_data[ gi[ stA ] ] ) ? 1 : 0;
+				gf[ stC ] = ( gi[ stA ] === 0 || pr_strings_data[ gi[ stA ] ] === 0 ) ? 1 : 0;
 				break;
 			case OP_NOT_FNC:
-				gf[ stC ] = ! gi[ stA ] ? 1 : 0;
+				gf[ stC ] = ( gi[ stA ] === 0 ) ? 1 : 0;
 				break;
 			case OP_NOT_ENT:
 				gf[ stC ] = ( gi[ stA ] === 0 ) ? 1 : 0;
@@ -571,12 +571,12 @@ export function PR_ExecuteProgram( fnum ) {
 			//==================
 
 			case OP_IFNOT:
-				if ( ! gi[ stA ] )
+				if ( gi[ stA ] === 0 )
 					s += stB - 1; // offset the s++
 				break;
 
 			case OP_IF:
-				if ( gi[ stA ] )
+				if ( gi[ stA ] !== 0 )
 					s += stB - 1; // offset the s++
 				break;
 
