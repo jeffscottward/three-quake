@@ -13,6 +13,11 @@ export const MAX_DLIGHTS = 32;
 // Surface flags
 export const SURF_DRAWTILED = 0x20;
 
+// Plane types for axial optimization
+const PLANE_X = 0;
+const PLANE_Y = 1;
+const PLANE_Z = 2;
+
 // Pre-allocated scratch vectors for RecursiveLightPoint (indexed by recursion depth)
 // BSP trees are typically 20-30 levels deep max
 const _lightMidPool = [];
@@ -291,12 +296,32 @@ export function RecursiveLightPoint( node, start, end, surfaces, depth = 0 ) {
 		return - 1; // didn't hit anything
 
 	// calculate mid point
-
-	// FIXME: optimize for axial
 	const plane = node.plane;
 	if ( ! plane ) return - 1;
-	const front = DotProduct( start, plane.normal ) - plane.dist;
-	const back = DotProduct( end, plane.normal ) - plane.dist;
+
+	// Optimize for axial planes (very common in Quake maps)
+	let front, back;
+	switch ( plane.type ) {
+
+		case PLANE_X:
+			front = start[ 0 ] - plane.dist;
+			back = end[ 0 ] - plane.dist;
+			break;
+		case PLANE_Y:
+			front = start[ 1 ] - plane.dist;
+			back = end[ 1 ] - plane.dist;
+			break;
+		case PLANE_Z:
+			front = start[ 2 ] - plane.dist;
+			back = end[ 2 ] - plane.dist;
+			break;
+		default:
+			front = DotProduct( start, plane.normal ) - plane.dist;
+			back = DotProduct( end, plane.normal ) - plane.dist;
+			break;
+
+	}
+
 	const side = front < 0 ? 1 : 0;
 
 	if ( ( back < 0 ) === ( front < 0 ) )

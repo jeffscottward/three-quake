@@ -81,6 +81,9 @@ const _dlight_local = new Float32Array( 2 );
 const _colinear_v1 = new Float32Array( 3 );
 const _colinear_v2 = new Float32Array( 3 );
 
+// Flag to track if PVS changed and visibility needs update
+let _visibilityNeedsUpdate = true;
+
 let active_lightmaps = 0;
 
 // glRect_t equivalent
@@ -1715,12 +1718,17 @@ export function R_MarkLeaves() {
 	const cl_ref = cl;
 	if ( ! cl_ref || ! cl_ref.worldmodel ) return;
 
-	if ( r_oldviewleaf === r_viewleaf && ! r_novis.value )
+	if ( r_oldviewleaf === r_viewleaf && ! r_novis.value ) {
+
+		_visibilityNeedsUpdate = false;
 		return;
+
+	}
 
 	if ( mirror )
 		return;
 
+	_visibilityNeedsUpdate = true;
 	inc_r_visframecount();
 	set_r_oldviewleaf( r_viewleaf );
 
@@ -2322,6 +2330,9 @@ function R_BuildWorldMeshes() {
 //============================================================================
 
 function R_UpdateWorldVisibility() {
+
+	// Skip update if viewleaf hasn't changed (PVS is the same)
+	if ( ! _visibilityNeedsUpdate ) return;
 
 	for ( let i = 0; i < instanceVisInfo.length; i ++ ) {
 
