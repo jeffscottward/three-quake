@@ -639,13 +639,13 @@ export async function WT_Connect( host ) {
 
 			}
 
-			// Check if lobby is redirecting us to a room server on a different port
+			// Check if lobby is redirecting us to a room server
 			if ( firstMsg.type === LOBBY_ROOMS && firstMsg.data && firstMsg.data.length > 0 ) {
 
 				try {
 
 					const roomInfo = JSON.parse( new TextDecoder().decode( firstMsg.data ) );
-					if ( roomInfo.port && roomInfo.port !== 4433 ) {
+					if ( roomInfo.port ) {
 
 						// Close lobby connection and redirect to room server
 						Con_Printf( 'Redirecting to room server on port ' + roomInfo.port + '\n' );
@@ -658,7 +658,7 @@ export async function WT_Connect( host ) {
 						const roomUrl = urlObj.toString();
 
 						// Connect directly to room server
-						return await _WT_ConnectDirect( roomUrl, host );
+						return await _WT_ConnectDirect( roomUrl, host, roomId );
 
 					}
 
@@ -675,7 +675,7 @@ export async function WT_Connect( host ) {
 			Con_Printf( 'Room on same port, reconnecting...\n' );
 			transport.close();
 			NET_FreeQSocket( sock );
-			return await _WT_ConnectDirect( url, host );
+			return await _WT_ConnectDirect( url, host, roomId );
 
 		}
 
@@ -721,7 +721,7 @@ TWO-STREAM PROTOCOL:
 Frame format: [length:2][data...]
 =============
 */
-async function _WT_ConnectDirect( url, originalHost ) {
+async function _WT_ConnectDirect( url, originalHost, roomId = null ) {
 
 	Con_Printf( 'WebTransport connecting directly to ' + url + '\n' );
 
@@ -793,6 +793,14 @@ async function _WT_ConnectDirect( url, originalHost ) {
 			// Note: Don't set sock.disconnected - that's only set by NET_FreeQSocket
 
 		} );
+
+		// Update URL with room parameter for easy sharing
+		if ( roomId != null && typeof window !== 'undefined' ) {
+
+			const newUrl = window.location.pathname + '?room=' + roomId;
+			history.replaceState( null, '', newUrl );
+
+		}
 
 		return sock;
 

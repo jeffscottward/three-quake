@@ -16,7 +16,7 @@ import { Cvar_SetValue } from './cvar.js';
 import { scr_viewsize, scr_con_current } from './gl_screen.js';
 import { v_gamma } from './view.js';
 import { gl_texturemode, GL_UpdateTextureFiltering } from './glquake.js';
-import { skill, coop, teamplay, fraglimit, timelimit, deathmatch, svs } from './server.js';
+import { skill, coop, teamplay, deathmatch, svs } from './server.js';
 import { Touch_ExitFullscreen } from './touch.js';
 import { Draw_GetVirtualWidth, Draw_GetVirtualHeight } from './gl_draw.js';
 
@@ -1060,9 +1060,9 @@ function M_LanConfig_Key( key ) {
 				const params = new URLSearchParams( window.location.search );
 				const serverUrl = params.get( 'server' ) || DEFAULT_WT_SERVER;
 
-				// Build connect URL - use room's port if available (multi-process mode)
+				// Build connect URL - use room's port if available
 				let connectUrl;
-				if ( room.port && room.port !== 4433 ) {
+				if ( room.port ) {
 
 					// Connect directly to room server on its port
 					const urlObj = new URL( serverUrl.replace( /^wt(s)?:\/\//, 'https://' ) );
@@ -1072,7 +1072,7 @@ function M_LanConfig_Key( key ) {
 
 				} else {
 
-					// Legacy: connect through lobby with room ID
+					// Fallback: connect through lobby with room ID
 					connectUrl = serverUrl + '?room=' + encodeURIComponent( room.id );
 
 				}
@@ -1316,10 +1316,8 @@ function M_GameOptions_Key( key ) {
 
 							// Connect to the remote server as a client (not local game)
 							// The remote server is the authoritative game server
-							// If room has a port, connect directly to it (room server)
-							// Otherwise, connect to lobby with room ID (legacy mode)
 							let connectUrl;
-							if ( room.port && room.port !== 4433 ) {
+							if ( room.port ) {
 
 								// Connect directly to room server on its port
 								const urlObj = new URL( serverUrl.replace( /^wt(s)?:\/\//, 'https://' ) );
@@ -1329,7 +1327,7 @@ function M_GameOptions_Key( key ) {
 
 							} else {
 
-								// Legacy: connect through lobby
+								// Fallback: connect through lobby
 								connectUrl = serverUrl + '?room=' + room.id;
 
 							}

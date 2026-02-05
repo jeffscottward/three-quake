@@ -4,17 +4,15 @@ import { MAX_MODELS, MAX_SOUNDS, MAX_EDICTS, MAX_LIGHTSTYLES,
 	STAT_HEALTH, STAT_FRAGS, STAT_WEAPON, STAT_AMMO, STAT_ARMOR,
 	STAT_WEAPONFRAME, STAT_SHELLS, STAT_ACTIVEWEAPON, STAT_MONSTERS,
 	STAT_SECRETS } from './quakedef.js';
-import { PITCH, YAW, ROLL } from './quakedef.js';
 import { Con_Printf, Con_DPrintf, SZ_Alloc, SZ_Clear,
 	MSG_WriteByte, MSG_WriteString } from './common.js';
-import { Sys_Error } from './sys.js';
 import { NET_Connect, NET_SendMessage, NET_CanSendMessage, NET_Close } from './net_main.js';
 import { cvar_t, Cvar_RegisterVariable } from './cvar.js';
 import { Cmd_AddCommand } from './cmd.js';
 import { Cbuf_InsertText } from './cmd.js';
 import { clc_disconnect, clc_stringcmd } from './protocol.js';
 import { CL_GetMessage, CL_PlayDemo_f } from './cl_demo.js';
-import { CL_ParseServerMessage, cl_playerindex } from './cl_parse.js';
+import { CL_ParseServerMessage } from './cl_parse.js';
 import { SIGNONS, MAX_DLIGHTS, MAX_EFRAGS, MAX_BEAMS, MAX_TEMP_ENTITIES,
 	MAX_STATIC_ENTITIES, MAX_DEMOS, MAX_VISEDICTS,
 	ca_dedicated, ca_disconnected, ca_connected,
@@ -24,10 +22,10 @@ import { SIGNONS, MAX_DLIGHTS, MAX_EFRAGS, MAX_BEAMS, MAX_TEMP_ENTITIES,
 	dlight_t, entity_t, efrag_t, lightstyle_t, beam_t,
 	client_state_t, usercmd_t, cshift_t,
 	NUM_CSHIFTS } from './client.js';
-import { anglemod, VectorCopy, VectorSubtract, VectorMA, AngleVectors, DotProduct } from './mathlib.js';
+import { anglemod, VectorCopy, VectorMA, AngleVectors } from './mathlib.js';
 import { R_RocketTrail, R_RemoveEfrags, R_EntityParticles } from './render.js';
 import { CL_InitTEnts, CL_UpdateTEnts } from './cl_tent.js';
-import { host_frametime, realtime, host_framecount, Host_Error, Host_EndGame, sv } from './host.js';
+import { host_frametime, realtime, Host_Error, sv } from './host.js';
 import { SCR_EndLoadingPlaque, SCR_BeginLoadingPlaque } from './gl_screen.js';
 import { S_StopAllSounds } from './snd_dma.js';
 import { M_ConnectionError, M_ShouldReturnOnError } from './menu.js';
@@ -223,13 +221,6 @@ export function CL_Disconnect() {
 	cls.demoplayback = cls.timedemo = false;
 	cls.signon = 0;
 
-	// Clear room from browser URL on disconnect (single player or multiplayer)
-	if ( typeof window !== 'undefined' && window.location.search.includes( 'room=' ) ) {
-
-		history.replaceState( null, '', window.location.pathname );
-
-	}
-
 }
 
 export function CL_Disconnect_f() {
@@ -237,6 +228,13 @@ export function CL_Disconnect_f() {
 	CL_Disconnect();
 	// if ( sv.active )
 	//     Host_ShutdownServer( false );
+
+	// Clear room from browser URL on explicit disconnect
+	if ( typeof window !== 'undefined' && window.location.search.includes( 'room=' ) ) {
+
+		history.replaceState( null, '', window.location.pathname );
+
+	}
 
 }
 
@@ -257,6 +255,13 @@ export async function CL_EstablishConnection( host ) {
 		return;
 
 	CL_Disconnect();
+
+	// Clear room from browser URL when connecting to single player (local)
+	if ( host === 'local' && typeof window !== 'undefined' && window.location.search.includes( 'room=' ) ) {
+
+		history.replaceState( null, '', window.location.pathname );
+
+	}
 
 	try {
 
