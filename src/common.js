@@ -314,6 +314,12 @@ export function SZ_Print( buf, data ) {
 // Handles byte ordering and avoids alignment errors
 //===========================================================================
 
+// Cached buffers for float conversion to avoid per-call allocations (Golden Rule #4)
+const _floatWriteBuf = new ArrayBuffer( 4 );
+const _floatWriteView = new DataView( _floatWriteBuf );
+const _floatReadBuf = new ArrayBuffer( 4 );
+const _floatReadView = new DataView( _floatReadBuf );
+
 // writing functions
 
 export function MSG_WriteChar( sb, c ) {
@@ -350,13 +356,12 @@ export function MSG_WriteLong( sb, c ) {
 
 export function MSG_WriteFloat( sb, f ) {
 
-	const view = new DataView( new ArrayBuffer( 4 ) );
-	view.setFloat32( 0, f, true ); // little-endian
+	_floatWriteView.setFloat32( 0, f, true ); // little-endian
 	const offset = SZ_GetSpace( sb, 4 );
-	sb.data[ offset ] = view.getUint8( 0 );
-	sb.data[ offset + 1 ] = view.getUint8( 1 );
-	sb.data[ offset + 2 ] = view.getUint8( 2 );
-	sb.data[ offset + 3 ] = view.getUint8( 3 );
+	sb.data[ offset ] = _floatWriteView.getUint8( 0 );
+	sb.data[ offset + 1 ] = _floatWriteView.getUint8( 1 );
+	sb.data[ offset + 2 ] = _floatWriteView.getUint8( 2 );
+	sb.data[ offset + 3 ] = _floatWriteView.getUint8( 3 );
 
 }
 
@@ -494,15 +499,13 @@ export function MSG_ReadFloat() {
 
 	}
 
-	const buf = new ArrayBuffer( 4 );
-	const view = new DataView( buf );
-	view.setUint8( 0, net_message.data[ msg_readcount ] );
-	view.setUint8( 1, net_message.data[ msg_readcount + 1 ] );
-	view.setUint8( 2, net_message.data[ msg_readcount + 2 ] );
-	view.setUint8( 3, net_message.data[ msg_readcount + 3 ] );
+	_floatReadView.setUint8( 0, net_message.data[ msg_readcount ] );
+	_floatReadView.setUint8( 1, net_message.data[ msg_readcount + 1 ] );
+	_floatReadView.setUint8( 2, net_message.data[ msg_readcount + 2 ] );
+	_floatReadView.setUint8( 3, net_message.data[ msg_readcount + 3 ] );
 	msg_readcount += 4;
 
-	return view.getFloat32( 0, true ); // little-endian
+	return _floatReadView.getFloat32( 0, true ); // little-endian
 
 }
 
