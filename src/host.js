@@ -2026,6 +2026,7 @@ function Host_Spawn_f() {
 		const team = ( host_client.colors & 15 ) + 1;
 		ent.v.colormap = colormap;
 		ent.v.team = team;
+		ent.v.netname = ED_NewString( host_client.name );
 
 		// copy spawn parms out of the client_t
 		if ( pr_global_struct ) {
