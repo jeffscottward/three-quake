@@ -45,7 +45,6 @@ const scr_showturtle = { name: 'showturtle', string: '0', value: 0 };
 const scr_showpause = { name: 'showpause', string: '1', value: 1 };
 const scr_printspeed = { name: 'scr_printspeed', string: '8', value: 8 };
 const gl_triplebuffer = { name: 'gl_triplebuffer', string: '1', value: 1, archive: true };
-const crosshair = { name: 'crosshair', string: '0', value: 0, archive: true };
 
 export let scr_initialized = false;
 
@@ -414,7 +413,6 @@ export function SCR_Init() {
 	Cvar_RegisterVariable( scr_centertime );
 	Cvar_RegisterVariable( scr_printspeed );
 	Cvar_RegisterVariable( gl_triplebuffer );
-	Cvar_RegisterVariable( crosshair );
 
 	//
 	// register our commands
@@ -872,9 +870,9 @@ export function SCR_UpdateScreen() {
 
 	} else {
 
-		if ( crosshair.value )
-			Draw_Character( scr_vrect.x + Math.floor( scr_vrect.width / 2 ),
-				scr_vrect.y + Math.floor( scr_vrect.height / 2 ), 43 ); // '+'
+		if ( ! _cls.demoplayback )
+			Draw_Character( Math.floor( Draw_GetVirtualWidth() / 2 ) - 4,
+				Math.floor( Draw_GetVirtualHeight() / 2 ) - 4, 43 ); // '+' crosshair
 
 		SCR_DrawRam();
 		SCR_DrawNet();

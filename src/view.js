@@ -58,10 +58,6 @@ const v_ipitch_level = new cvar_t( 'v_ipitch_level', '0.3', false );
 
 const v_idlescale = new cvar_t( 'v_idlescale', '0', false );
 
-const crosshair = new cvar_t( 'crosshair', '0', true );
-const cl_crossx = new cvar_t( 'cl_crossx', '0', false );
-const cl_crossy = new cvar_t( 'cl_crossy', '0', false );
-
 const gl_cshiftpercent = new cvar_t( 'gl_cshiftpercent', '100', false );
 
 let v_dmg_time = 0;
@@ -956,9 +952,6 @@ export function V_Init() {
 	Cvar_RegisterVariable( v_ipitch_level );
 
 	Cvar_RegisterVariable( v_idlescale );
-	Cvar_RegisterVariable( crosshair );
-	Cvar_RegisterVariable( cl_crossx );
-	Cvar_RegisterVariable( cl_crossy );
 	Cvar_RegisterVariable( gl_cshiftpercent );
 
 	Cvar_RegisterVariable( scr_ofsx );
