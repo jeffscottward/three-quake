@@ -1179,6 +1179,21 @@ export function R_DrawBrushModel( e ) {
 	if ( R_CullBox( mins, maxs ) )
 		return;
 
+	// Update dynamic lightmaps for brush entity surfaces (flickering lights, etc.)
+	// This must happen every frame, even when using cached geometry, because
+	// the lightmap textures are shared with world surfaces and need updating.
+	if ( clmodel.surfaces && clmodel.nummodelsurfaces ) {
+
+		const startSurf = clmodel.firstmodelsurface;
+		for ( let i = 0; i < clmodel.nummodelsurfaces; i ++ ) {
+
+			const psurf = clmodel.surfaces[ startSurf + i ];
+			if ( psurf ) R_RenderDynamicLightmaps( psurf );
+
+		}
+
+	}
+
 	// Check if we have a cached brush group for this entity
 	// Invalidate cache if entity.frame changed (for texture animation, e.g. buttons)
 	let brushGroup = e._brushGroup;
@@ -1293,6 +1308,10 @@ export function R_DrawBrushModel( e ) {
 	// Add to scene (will be removed next frame by R_DrawWorld cleanup)
 	if ( scene && ! brushGroup.parent ) scene.add( brushGroup );
 	brushEntityGroups.push( brushGroup );
+
+	// Upload any modified lightmaps (matches original C: R_BlendLightmaps called
+	// at end of R_DrawBrushModel to ensure brush entity lightmap changes are applied)
+	R_BlendLightmaps();
 
 }
 
@@ -1586,9 +1605,9 @@ export function R_BlendLightmaps() {
 
 	for ( let i = 0; i < MAX_LIGHTMAPS; i ++ ) {
 
-		const p = lightmap_polys[ i ];
-		if ( ! p ) continue;
-
+		// Check if this lightmap was modified (by world or brush entity surfaces)
+		// Don't require lightmap_polys[i] to be set - brush entities may use
+		// lightmap atlases that have no visible world surfaces this frame.
 		if ( lightmap_modified[ i ] ) {
 
 			lightmap_modified[ i ] = false;
