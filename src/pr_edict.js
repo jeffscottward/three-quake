@@ -743,7 +743,8 @@ Handles backslash-n escape sequences.
 */
 export function ED_NewString( string ) {
 
-	let result = '';
+	// Use array + join() instead of string concatenation to avoid O(n²) allocations
+	const chars = [];
 
 	for ( let i = 0; i < string.length; i ++ ) {
 
@@ -751,17 +752,19 @@ export function ED_NewString( string ) {
 
 			i ++;
 			if ( string[ i ] === 'n' )
-				result += '\n';
+				chars.push( '\n' );
 			else
-				result += '\\';
+				chars.push( '\\' );
 
 		} else {
 
-			result += string[ i ];
+			chars.push( string[ i ] );
 
 		}
 
 	}
+
+	const result = chars.join( '' );
 
 	// Store in extra strings and return an offset
 	const ofs = pr_extra_strings_offset + pr_extra_strings.length;
