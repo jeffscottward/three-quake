@@ -11,6 +11,7 @@ import { sv } from './src/server.js';
 import { scene, camera } from './src/gl_rmain.js';
 import { renderer } from './src/vid.js';
 import { Draw_CachePicFromPNG } from './src/gl_draw.js';
+import { XR_Init } from './src/webxr.js';
 
 const parms = {
 	basedir: '.',
@@ -117,6 +118,9 @@ async function main() {
 
 		}
 
+		// Initialize WebXR (creates rig, offers VR session — must be after Host_Init)
+		XR_Init( scene );
+
 		// Expose for debugging
 		window.Cbuf_AddText = Cbuf_AddText;
 		window.cls = cls;
@@ -128,19 +132,19 @@ async function main() {
 
 		let oldtime = performance.now() / 1000;
 
-		function frame() {
+		// Use renderer.setAnimationLoop instead of requestAnimationFrame.
+		// This is required for WebXR — Three.js automatically switches to
+		// xrSession.requestAnimationFrame when a VR session is active.
+		// In non-XR mode, behavior is identical to regular rAF.
+		renderer.setAnimationLoop( function ( timestamp ) {
 
-			const newtime = performance.now() / 1000;
+			const newtime = timestamp / 1000;
 			const time = newtime - oldtime;
 			oldtime = newtime;
 
 			Host_Frame( time );
 
-			requestAnimationFrame( frame );
-
-		}
-
-		requestAnimationFrame( frame );
+		} );
 
 	} catch ( e ) {
 

@@ -23,6 +23,7 @@ import {
 	R_DrawParticles as R_DrawParticles_impl
 } from './r_part.js';
 import { Debug_UpdateOverlay, Debug_ClearLabels } from './debug_overlay.js';
+import { isXRActive, getXRRig, getControllerGripRight, XR_SetCamera, XR_SCALE } from './webxr.js';
 import {
 	cl, cl_visedicts, cl_numvisedicts, cl_dlights, cl_entities,
 	cl_lightstyle
@@ -327,7 +328,7 @@ export function R_SetupGL() {
 	const screenaspect = r_refdef.vrect.width / r_refdef.vrect.height;
 
 	// set up Three.js camera to match Quake's perspective
-	if ( ! camera ) {
+	if ( camera == null ) {
 
 		camera = new THREE.PerspectiveCamera(
 			r_refdef.fov_y,
@@ -335,6 +336,11 @@ export function R_SetupGL() {
 			4, // zNear
 			4096 // zFar
 		);
+
+		// Parent camera to XR rig (if available).
+		// In non-XR: parent doesn't matter (matrixAutoUpdate = false).
+		// In XR: Three.js composes rig.matrixWorld × camera.matrix (headset pose).
+		XR_SetCamera( camera );
 
 	} else {
 
@@ -396,17 +402,55 @@ export function R_SetupGL() {
 	// We match this with THREE.BackSide on materials.
 	const forward = _setupgl_forward, right = _setupgl_right, up = _setupgl_up;
 	const m = _setupgl_matrix;
-	m.set(
-		right[ 0 ], up[ 0 ], - forward[ 0 ], r_refdef.vieworg[ 0 ],
-		right[ 1 ], up[ 1 ], - forward[ 1 ], r_refdef.vieworg[ 1 ],
-		right[ 2 ], up[ 2 ], - forward[ 2 ], r_refdef.vieworg[ 2 ],
-		0, 0, 0, 1
-	);
 
-	camera.matrixAutoUpdate = false;
-	camera.matrixWorld.copy( m );
-	camera.matrixWorldInverse.copy( m ).invert();
-	camera.matrixWorld.decompose( camera.position, camera.quaternion, camera.scale );
+	if ( isXRActive() ) {
+
+		// In XR mode: update the camera rig position and orientation.
+		// Three.js XR composes: rig.matrixWorld × camera.matrix (from headset).
+		// The rig defines the player's body transform in Quake world space.
+		// Head tracking (rotation + small position deltas) is applied on top.
+		const rig = getXRRig();
+		if ( rig != null ) {
+
+			rig.position.set(
+				r_refdef.vieworg[ 0 ],
+				r_refdef.vieworg[ 1 ],
+				r_refdef.vieworg[ 2 ]
+			);
+
+			// Build rotation-only matrix (coord conversion + viewangles)
+			m.set(
+				right[ 0 ], up[ 0 ], - forward[ 0 ], 0,
+				right[ 1 ], up[ 1 ], - forward[ 1 ], 0,
+				right[ 2 ], up[ 2 ], - forward[ 2 ], 0,
+				0, 0, 0, 1
+			);
+			rig.quaternion.setFromRotationMatrix( m );
+
+		}
+
+		// Let Three.js compose matrixWorld from rig × headset pose
+		camera.matrixWorldAutoUpdate = true;
+
+	} else {
+
+		// Non-XR mode: set camera matrixWorld directly (existing behavior).
+		// matrixWorldAutoUpdate must be false so Three.js doesn't overwrite
+		// our manually-set matrixWorld from the parent rig's transform.
+		m.set(
+			right[ 0 ], up[ 0 ], - forward[ 0 ], r_refdef.vieworg[ 0 ],
+			right[ 1 ], up[ 1 ], - forward[ 1 ], r_refdef.vieworg[ 1 ],
+			right[ 2 ], up[ 2 ], - forward[ 2 ], r_refdef.vieworg[ 2 ],
+			0, 0, 0, 1
+		);
+
+		camera.matrixAutoUpdate = false;
+		camera.matrixWorldAutoUpdate = false;
+		camera.matrixWorld.copy( m );
+		camera.matrixWorldInverse.copy( m ).invert();
+		camera.matrixWorld.decompose( camera.position, camera.quaternion, camera.scale );
+
+	}
 
 	// Store world matrix for later use (mirror rendering, etc.)
 	const elements = camera.matrixWorldInverse.elements;
@@ -524,44 +568,107 @@ function _viewmodelAfterRender( r ) {
 
 }
 
+// No-op callback (Three.js requires onBeforeRender/onAfterRender to be functions, never null)
+function _noop() {}
+
+// Cached objects for XR weapon positioning (Golden Rule #4: no allocations in render loop)
+const _xrGripWorldPos = new THREE.Vector3();
+const _xrGripQuat = new THREE.Quaternion();
+
+// Alignment quaternion: maps Quake model axes to XR grip axes.
+// Quake model: +X = barrel forward, +Y = left, +Z = up
+// XR grip:     -Z = forward,       -X = left,  +Y = up
+// Rotation matrix: model→grip = [[0,-1,0],[0,0,1],[-1,0,0]]
+const _xrWeaponAlignQuat = new THREE.Quaternion().setFromRotationMatrix(
+	new THREE.Matrix4().set(
+		0, - 1, 0, 0,
+		0, 0, 1, 0,
+		- 1, 0, 0, 0,
+		0, 0, 0, 1
+	)
+);
+
 export function R_DrawViewModel() {
 
-	if ( ! r_drawviewmodel.value )
+	if ( r_drawviewmodel.value === 0 )
 		return;
 
-	if ( chase_active.value )
+	if ( chase_active.value !== 0 )
 		return;
 
 	if ( envmap )
 		return;
 
-	if ( ! r_drawentities.value )
+	if ( r_drawentities.value === 0 )
 		return;
 
-	if ( ! cl )
+	if ( cl == null )
 		return;
 
 	if ( cl.items & 524288 ) // IT_INVISIBILITY
 		return;
 
-	if ( cl.stats && cl.stats[ 0 ] <= 0 ) // STAT_HEALTH
+	if ( cl.stats != null && cl.stats[ 0 ] <= 0 ) // STAT_HEALTH
 		return;
 
 	currententity = cl.viewent;
-	if ( ! currententity || ! currententity.model )
+	if ( currententity == null || currententity.model == null )
 		return;
 
 	// Draw normally — stays in main scene with all lights
 	R_DrawAliasModel( currententity );
 
-	// Set up onBeforeRender/onAfterRender to apply depthRange hack
-	// This runs right when Three.js draws this mesh, so the GL state sticks
 	const mesh = currententity._aliasMesh;
-	if ( mesh ) {
+	if ( mesh == null )
+		return;
 
-		// Clone material once and cache on entity — re-clone only if base material changes
+	// In XR mode: override weapon position/rotation to follow the right controller
+	if ( isXRActive() ) {
+
+		const grip = getControllerGripRight();
+		if ( grip != null ) {
+
+			// Parent the weapon to the grip so it follows the controller.
+			// The grip is a child of the rig (which is at player vieworg).
+			// Grip local coords are in XR meters, so we scale the weapon
+			// model down by 1/XR_SCALE to match (weapon is built in Quake units).
+			if ( mesh.parent !== grip ) {
+
+				grip.add( mesh );
+
+			}
+
+			// Local transform relative to grip:
+			// Position offset in grip-local space (meters)
+			mesh.position.set( 0, - 0.075, - 0.15 );
+
+			// Rotation: align Quake model axes to XR grip axes.
+			mesh.quaternion.copy( _xrWeaponAlignQuat );
+
+			// Scale down from Quake units to meters (grip space is in meters)
+			mesh.scale.setScalar( 1 / XR_SCALE );
+
+		}
+
+		// No depthRange hack in XR — weapon renders at actual world position
+		mesh.renderOrder = 0;
+		mesh.onBeforeRender = _noop;
+		mesh.onAfterRender = _noop;
+
+	} else {
+
+		// If returning from XR, re-parent mesh to scene and reset scale
+		if ( mesh.parent !== scene && scene != null ) {
+
+			scene.add( mesh );
+			mesh.scale.setScalar( 1 );
+			_entityMeshesInScene.add( mesh );
+
+		}
+
+		// Non-XR: apply depthRange hack so weapon renders on top of world
 		const baseMaterial = mesh.material;
-		if ( ! currententity._viewmodelMaterial || currententity._viewmodelMaterialBase !== baseMaterial ) {
+		if ( currententity._viewmodelMaterial == null || currententity._viewmodelMaterialBase !== baseMaterial ) {
 
 			currententity._viewmodelMaterial = baseMaterial.clone();
 			currententity._viewmodelMaterial.transparent = true;
@@ -954,7 +1061,12 @@ export function R_RenderView() {
 	}
 
 	// Draw screen blend overlay AFTER main scene (damage flash, powerups, underwater tint)
-	R_PolyBlend();
+	// Skip in XR mode — the 2D ortho overlay doesn't work with stereo rendering
+	if ( isXRActive() === false ) {
+
+		R_PolyBlend();
+
+	}
 
 	// Clean up water meshes AFTER rendering (they need to exist during render)
 	R_CleanupWaterMeshes_rsurf();
