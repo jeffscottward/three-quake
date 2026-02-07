@@ -6,6 +6,7 @@ import { r_avertexnormals } from './anorm_dots.js';
 import { d_8to24table } from './vid.js';
 import { cl as client_cl } from './client.js';
 import { gl_texturemode, GL_RegisterTexture } from './glquake.js';
+import { isXRActive, XR_SCALE } from './webxr.js';
 
 const MAX_PARTICLES = 2048;
 
@@ -798,6 +799,10 @@ export function R_DrawParticles() {
 		pointsMesh.frustumCulled = false;
 
 	}
+
+	// In XR mode, scene.scale = 1/XR_SCALE but PointsMaterial.size is not
+	// affected by parent scale. Divide size to match meter-space distances.
+	pointsMaterial.size = isXRActive() ? 3 / XR_SCALE : 3;
 
 	pointsGeometry.attributes.position.needsUpdate = true;
 	pointsGeometry.attributes.color.needsUpdate = true;

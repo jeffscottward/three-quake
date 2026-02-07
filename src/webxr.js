@@ -8,32 +8,26 @@ import { renderer } from './vid.js';
 // Constants
 //============================================================================
 
-// Quake units per meter. Quake uses ~1 unit ≈ 1 inch, so 1 meter ≈ 39.37 units.
-// We use 40 for a round number. This scales controller positions from XR meters
-// to Quake world units. The camera rig itself is NOT scaled (to preserve the view).
-export const XR_SCALE = 40;
+// Quake units per meter. Tuned so that a 1.7m-tall user maps to ~56 Quake
+// units (the player collision hull height), making enemies, doorways, and
+// hallways feel correctly proportioned in VR.
+export const XR_SCALE = 30;
 
 //============================================================================
-// Pre-allocated temp objects for XR_GetGripWorldPose (Golden Rule #4)
+// Pre-allocated temp objects (Golden Rule #4)
 //============================================================================
 
-const _gripPos = new THREE.Vector3();
-const _gripQuat = new THREE.Quaternion();
-const _headPos = new THREE.Vector3();
-const _headQuat = new THREE.Quaternion();
-const _headScale = new THREE.Vector3();
-const _gripScale = new THREE.Vector3();
-const _relativeOffset = new THREE.Vector3();
-const _rigQuat = new THREE.Quaternion();
+const _gripWorldPos = new THREE.Vector3();
+const _gripWorldQuat = new THREE.Quaternion();
 
 //============================================================================
 // State
 //============================================================================
 
 let xrSessionActive = false;
-let xrRig = null; // THREE.Group — positioned at vieworg each frame
-let xrOffset = null; // THREE.Group — child of rig, offset up by XR_SCALE
+let xrRig = null; // THREE.Group — NOT in scene, positioned at vieworg/XR_SCALE each frame
 let controllerGripRight = null; // right controller grip space
+let _scene = null; // scene reference for scale toggling
 
 // Input state — polled each frame by XR_PollInput(), consumed by IN_Move()
 export const xrInput = {
@@ -71,40 +65,49 @@ export function getControllerGripRight() {
 //
 // Called after Host_Init when renderer and scene are ready.
 // Creates the camera rig, sets up controllers, and offers VR session.
+//
+// The rig is NOT added to the scene. Instead, the scene is scaled down
+// by 1/XR_SCALE when XR is active, putting everything in meter space.
+// The rig (also in meter space) is positioned at vieworg / XR_SCALE.
+// This way the XR camera and scene content are in the same units.
 //============================================================================
 
 export function XR_Init( scene ) {
 
 	if ( renderer == null ) return;
 
+	_scene = scene;
+
 	// Enable XR on the renderer
 	renderer.xr.enabled = true;
-	renderer.xr.setReferenceSpaceType( 'local-floor' );
+	renderer.xr.setReferenceSpaceType( 'local' );
 
-	// Create camera rig — positioned at player vieworg each frame.
-	// With local-floor, the headset is ~1.7m above origin.
-	// Offset the rig up by XR_SCALE so the floor aligns with feet.
+	// Create camera rig — NOT a child of scene.
+	// Positioned at vieworg / XR_SCALE (meters) each frame.
+	// Three.js XR composes: rig.matrixWorld × camera.matrix (headset pose).
 	xrRig = new THREE.Group();
-	scene.add( xrRig );
 
-	xrOffset = new THREE.Group();
-	xrOffset.position.z = XR_SCALE;
-	xrRig.add( xrOffset );
-
-	// Right controller grip space (for weapon attachment)
-	controllerGripRight = renderer.xr.getControllerGrip( 0 );
-	xrOffset.add( controllerGripRight );
+	// Right controller targetRay (pointer) space — aims where the user points
+	// Index 0 is left hand on Quest, 1 is right hand
+	controllerGripRight = renderer.xr.getController( 1 );
+	xrRig.add( controllerGripRight );
 
 	// Session lifecycle
 	renderer.xr.addEventListener( 'sessionstart', function () {
 
 		xrSessionActive = true;
 
+		// Scale scene to meters so it matches XR coordinate space
+		if ( _scene != null ) _scene.scale.setScalar( 1 / XR_SCALE );
+
 	} );
 
 	renderer.xr.addEventListener( 'sessionend', function () {
 
 		xrSessionActive = false;
+
+		// Restore scene scale for non-XR rendering
+		if ( _scene != null ) _scene.scale.setScalar( 1 );
 
 		_offerSession();
 
@@ -120,14 +123,14 @@ export function XR_Init( scene ) {
 // Parents the camera to the XR rig. Called once when the camera is first
 // created in R_SetupGL. In non-XR mode the parent doesn't matter because
 // camera.matrixAutoUpdate is false and matrixWorld is set directly.
-// In XR mode, Three.js composes: rig.matrixWorld × camera.matrix (from headset).
+// In XR mode, Three.js composes: rig.matrixWorld × camera.matrix (headset pose).
 //============================================================================
 
 export function XR_SetCamera( camera ) {
 
-	if ( xrRig != null && camera != null && camera.parent !== xrOffset ) {
+	if ( xrRig != null && camera != null && camera.parent !== xrRig ) {
 
-		xrOffset.add( camera );
+		xrRig.add( camera );
 
 	}
 
@@ -213,17 +216,9 @@ export function XR_PollInput() {
 //============================================================================
 // XR_GetGripWorldPose
 //
-// Computes the right controller grip's world-space position and quaternion
-// in Quake coordinates. Instead of parenting the weapon to the grip (which
-// inherits the xrOffset's +40 Z), we manually compute world position:
-//
-//   1. Read grip pose from grip.matrix (meters, XR reference space)
-//   2. Read headset pose from renderer.xr.getCamera().matrix (same space)
-//   3. Compute relative offset (grip - head) in meters
-//   4. Scale by XR_SCALE to convert to Quake units
-//   5. Rotate by rig quaternion (XR ref space -> Quake world space)
-//   6. Add rig position (vieworg) for final world position
-//   7. Rotation: rigQuat * gripQuat
+// Returns the grip's world-space position and quaternion.
+// With scene.scale = 1/XR_SCALE, the grip's world position is in meters.
+// The caller converts to scene-local Quake units by multiplying by XR_SCALE.
 //
 // Returns false if grip or XR is not available.
 //============================================================================
@@ -234,39 +229,9 @@ export function XR_GetGripWorldPose( outPos, outQuat ) {
 	if ( controllerGripRight == null ) return false;
 	if ( xrRig == null ) return false;
 
-	const xrCamera = renderer.xr.getCamera();
-	if ( xrCamera == null ) return false;
-
-	// Force the grip to update its world matrix through the scene graph
-	controllerGripRight.updateWorldMatrix( true, false );
-
-	// Decompose grip's world matrix to get position/rotation in XR ref space.
-	// The grip is a child of xrOffset (z=40), so its matrixWorld includes
-	// the rig transform + xrOffset. We want the raw XR-space pose instead,
-	// so we decompose the grip's LOCAL matrix (which is the raw XR pose).
-	controllerGripRight.matrix.decompose( _gripPos, _gripQuat, _gripScale );
-
-	// Get headset position in XR reference space (local matrix of the XR camera)
-	// The XR camera's matrix (not matrixWorld) is the raw headset pose.
-	xrCamera.matrix.decompose( _headPos, _headQuat, _headScale );
-
-	// Compute relative offset in XR meters: grip position relative to head
-	_relativeOffset.copy( _gripPos ).sub( _headPos );
-
-	// Scale from meters to Quake units
-	_relativeOffset.multiplyScalar( XR_SCALE );
-
-	// Get the rig's world-space quaternion (converts XR ref space to Quake world)
-	xrRig.getWorldQuaternion( _rigQuat );
-
-	// Rotate the relative offset by the rig quaternion
-	_relativeOffset.applyQuaternion( _rigQuat );
-
-	// Final world position = rig position + rotated offset
-	outPos.copy( xrRig.position ).add( _relativeOffset );
-
-	// Final world rotation = rigQuat * gripQuat
-	outQuat.copy( _rigQuat ).multiply( _gripQuat );
+	// getWorldPosition/getWorldQuaternion call updateWorldMatrix internally
+	controllerGripRight.getWorldPosition( outPos );
+	controllerGripRight.getWorldQuaternion( outQuat );
 
 	return true;
 
@@ -277,7 +242,7 @@ export function XR_GetGripWorldPose( outPos, outQuat ) {
 //============================================================================
 
 const _sessionInit = {
-	requiredFeatures: [ 'local-floor' ]
+	requiredFeatures: [ 'local' ]
 };
 
 function _offerSession() {

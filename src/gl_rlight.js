@@ -7,6 +7,7 @@ import { MAXLIGHTMAPS, d_lightstylevalue, r_framecount,
 	gl_flashblend, v_blend } from './glquake.js';
 import { r_origin } from './render.js';
 import { cl_dlights } from './client.js';
+import { isXRActive, XR_SCALE } from './webxr.js';
 
 export const MAX_DLIGHTS = 32;
 
@@ -163,7 +164,22 @@ export function R_RenderDlights( cl, scene ) {
 			// Active - update properties
 			const pointLight = _getDlight( i );
 			pointLight.position.set( l.origin[ 0 ], l.origin[ 1 ], l.origin[ 2 ] );
-			pointLight.intensity = l.radius * 5;
+
+			// In XR mode, scene.scale = 1/XR_SCALE puts positions in meters,
+			// but PointLight.distance is not scaled by parent transform.
+			// Divide intensity and distance by XR_SCALE to match meter-space distances.
+			if ( isXRActive() ) {
+
+				pointLight.intensity = l.radius * 5 / XR_SCALE;
+				pointLight.distance = l.radius * 2 / XR_SCALE;
+
+			} else {
+
+				pointLight.intensity = l.radius * 5;
+				pointLight.distance = l.radius * 2;
+
+			}
+
 			pointLight.decay = 1; // Linear falloff
 
 			// Add to scene if not already there

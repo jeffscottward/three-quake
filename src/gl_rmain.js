@@ -23,7 +23,7 @@ import {
 	R_DrawParticles as R_DrawParticles_impl
 } from './r_part.js';
 import { Debug_UpdateOverlay, Debug_ClearLabels } from './debug_overlay.js';
-import { isXRActive, getXRRig, getControllerGripRight, XR_SetCamera, XR_SCALE, XR_GetGripWorldPose } from './webxr.js';
+import { isXRActive, getXRRig, XR_SetCamera, XR_SCALE, XR_GetGripWorldPose } from './webxr.js';
 import {
 	cl, cl_visedicts, cl_numvisedicts, cl_dlights, cl_entities,
 	cl_lightstyle
@@ -346,8 +346,21 @@ export function R_SetupGL() {
 
 		camera.fov = r_refdef.fov_y;
 		camera.aspect = screenaspect;
-		camera.near = 4;
-		camera.far = 4096;
+
+		// In XR mode, scene is in meters (1/XR_SCALE). Three.js XR uses
+		// camera.near/far for clipping, so convert to meters.
+		if ( isXRActive() ) {
+
+			camera.near = 4 / XR_SCALE;
+			camera.far = 4096 / XR_SCALE;
+
+		} else {
+
+			camera.near = 4;
+			camera.far = 4096;
+
+		}
+
 		camera.updateProjectionMatrix();
 
 	}
@@ -405,17 +418,22 @@ export function R_SetupGL() {
 
 	if ( isXRActive() ) {
 
-		// In XR mode: update the camera rig position and orientation.
-		// Three.js XR composes: rig.matrixWorld × camera.matrix (from headset).
-		// The rig defines the player's body transform in Quake world space.
-		// Head tracking (rotation + small position deltas) is applied on top.
+		// In XR mode: scene.scale = 1/XR_SCALE puts everything in meters.
+		// The rig is NOT in the scene, so it operates in meter space directly.
+		// Three.js XR composes: rig.matrixWorld × camera.matrix (headset pose).
+		//
+		// Position the rig at vieworg (player eye level).
+		// With 'local' reference space, the XR origin is at the headset's
+		// starting position (no floor offset), so the rig position directly
+		// corresponds to where the user sees from in the Quake world.
 		const rig = getXRRig();
 		if ( rig != null ) {
 
+			const s = 1 / XR_SCALE;
 			rig.position.set(
-				r_refdef.vieworg[ 0 ],
-				r_refdef.vieworg[ 1 ],
-				r_refdef.vieworg[ 2 ]
+				r_refdef.vieworg[ 0 ] * s,
+				r_refdef.vieworg[ 1 ] * s,
+				r_refdef.vieworg[ 2 ] * s
 			);
 
 			// Build rotation-only matrix (coord conversion + viewangles)
@@ -426,6 +444,9 @@ export function R_SetupGL() {
 				0, 0, 0, 1
 			);
 			rig.quaternion.setFromRotationMatrix( m );
+
+			// Rig is not in the scene graph, so manually update its matrixWorld
+			rig.updateMatrixWorld( true );
 
 		}
 
@@ -622,12 +643,13 @@ export function R_DrawViewModel() {
 	if ( mesh == null )
 		return;
 
-	// In XR mode: compute world-space weapon position from grip pose.
-	// We do NOT parent to the grip (which inherits xrOffset's +40 Z offset).
-	// Instead, keep the mesh in the scene and manually set its world position.
+	// In XR mode: position weapon at controller grip.
+	// Scene is scaled 1/XR_SCALE (meters). Grip world pos is in meters.
+	// Weapon mesh is a child of scene, so its position is in scene-local Quake units.
+	// Convert: grip meters * XR_SCALE = Quake units.
 	if ( isXRActive() ) {
 
-		// Ensure weapon mesh is in the scene (not parented to grip)
+		// Ensure weapon mesh is in the scene
 		if ( mesh.parent !== scene && scene != null ) {
 
 			scene.add( mesh );
@@ -637,13 +659,13 @@ export function R_DrawViewModel() {
 
 		if ( XR_GetGripWorldPose( _xrGripWorldPos, _xrGripQuat ) ) {
 
-			// Set world-space position directly
-			mesh.position.copy( _xrGripWorldPos );
+			// Grip world pos is in meters → multiply by XR_SCALE for scene-local Quake units
+			mesh.position.copy( _xrGripWorldPos ).multiplyScalar( XR_SCALE );
 
-			// Rotation: rigQuat * gripQuat * alignmentQuat
+			// Rotation: grip world quat * alignment to orient Quake model axes
 			mesh.quaternion.copy( _xrGripQuat ).multiply( _xrWeaponAlignQuat );
 
-			// Geometry is already in Quake units, scene is in Quake units — scale 1
+			// Scale 1: geometry is in Quake units, scene.scale handles the rest
 			mesh.scale.setScalar( 1 );
 
 		}
