@@ -421,6 +421,118 @@ export function DrawGLPoly( p, planeNormal ) {
 }
 
 //============================================================================
+// _mergeGLPolys
+//
+// Merges multiple glpoly_t into a single BufferGeometry. Used to batch
+// brush entity surfaces that share the same material into one draw call.
+//============================================================================
+
+function _mergeGLPolys( polys, planeNormals ) {
+
+	// Count total triangles across all polys
+	let totalTriangles = 0;
+	for ( let p = 0; p < polys.length; p ++ ) {
+
+		const poly = polys[ p ];
+		if ( poly != null && poly.numverts >= 3 ) {
+
+			totalTriangles += poly.numverts - 2;
+
+		}
+
+	}
+
+	if ( totalTriangles === 0 ) return null;
+
+	const positions = new Float32Array( totalTriangles * 9 );
+	const normals = new Float32Array( totalTriangles * 9 );
+	const uvs = new Float32Array( totalTriangles * 6 );
+	const lmUvs = new Float32Array( totalTriangles * 6 );
+
+	let triOffset = 0;
+
+	for ( let p = 0; p < polys.length; p ++ ) {
+
+		const poly = polys[ p ];
+		if ( poly == null || poly.numverts < 3 ) continue;
+
+		const planeNormal = planeNormals[ p ];
+		const nx = planeNormal != null ? planeNormal[ 0 ] : 0;
+		const ny = planeNormal != null ? planeNormal[ 1 ] : 0;
+		const nz = planeNormal != null ? planeNormal[ 2 ] : 1;
+
+		const numverts = poly.numverts;
+		const verts = poly.verts;
+		const numTriangles = numverts - 2;
+
+		for ( let i = 0; i < numTriangles; i ++ ) {
+
+			const i0 = 0;
+			const i1 = i + 2;
+			const i2 = i + 1;
+
+			const posBase = ( triOffset + i ) * 9;
+			const uvBase = ( triOffset + i ) * 6;
+
+			positions[ posBase + 0 ] = verts[ i0 * VERTEXSIZE + 0 ];
+			positions[ posBase + 1 ] = verts[ i0 * VERTEXSIZE + 1 ];
+			positions[ posBase + 2 ] = verts[ i0 * VERTEXSIZE + 2 ];
+
+			positions[ posBase + 3 ] = verts[ i1 * VERTEXSIZE + 0 ];
+			positions[ posBase + 4 ] = verts[ i1 * VERTEXSIZE + 1 ];
+			positions[ posBase + 5 ] = verts[ i1 * VERTEXSIZE + 2 ];
+
+			positions[ posBase + 6 ] = verts[ i2 * VERTEXSIZE + 0 ];
+			positions[ posBase + 7 ] = verts[ i2 * VERTEXSIZE + 1 ];
+			positions[ posBase + 8 ] = verts[ i2 * VERTEXSIZE + 2 ];
+
+			normals[ posBase + 0 ] = nx;
+			normals[ posBase + 1 ] = ny;
+			normals[ posBase + 2 ] = nz;
+
+			normals[ posBase + 3 ] = nx;
+			normals[ posBase + 4 ] = ny;
+			normals[ posBase + 5 ] = nz;
+
+			normals[ posBase + 6 ] = nx;
+			normals[ posBase + 7 ] = ny;
+			normals[ posBase + 8 ] = nz;
+
+			uvs[ uvBase + 0 ] = verts[ i0 * VERTEXSIZE + 3 ];
+			uvs[ uvBase + 1 ] = verts[ i0 * VERTEXSIZE + 4 ];
+
+			uvs[ uvBase + 2 ] = verts[ i1 * VERTEXSIZE + 3 ];
+			uvs[ uvBase + 3 ] = verts[ i1 * VERTEXSIZE + 4 ];
+
+			uvs[ uvBase + 4 ] = verts[ i2 * VERTEXSIZE + 3 ];
+			uvs[ uvBase + 5 ] = verts[ i2 * VERTEXSIZE + 4 ];
+
+			lmUvs[ uvBase + 0 ] = verts[ i0 * VERTEXSIZE + 5 ];
+			lmUvs[ uvBase + 1 ] = verts[ i0 * VERTEXSIZE + 6 ];
+
+			lmUvs[ uvBase + 2 ] = verts[ i1 * VERTEXSIZE + 5 ];
+			lmUvs[ uvBase + 3 ] = verts[ i1 * VERTEXSIZE + 6 ];
+
+			lmUvs[ uvBase + 4 ] = verts[ i2 * VERTEXSIZE + 5 ];
+			lmUvs[ uvBase + 5 ] = verts[ i2 * VERTEXSIZE + 6 ];
+
+		}
+
+		triOffset += numTriangles;
+
+	}
+
+	const geometry = new THREE.BufferGeometry();
+	geometry.setAttribute( 'position', new THREE.BufferAttribute( positions, 3 ) );
+	geometry.setAttribute( 'normal', new THREE.BufferAttribute( normals, 3 ) );
+	geometry.setAttribute( 'uv', new THREE.BufferAttribute( uvs, 2 ) );
+	geometry.setAttribute( 'uv1', new THREE.BufferAttribute( lmUvs, 2 ) );
+
+	return geometry;
+
+}
+
+//============================================================================
 // DrawGLWaterPoly
 //
 // Warp the vertex coordinates for water surfaces
@@ -1217,32 +1329,34 @@ export function R_DrawBrushModel( e ) {
 
 	}
 
-	if ( ! brushGroup ) {
+	if ( brushGroup == null ) {
 
-		// First time drawing this entity - build and cache the group
+		// First time drawing this entity - build and cache the group.
+		// Surfaces sharing the same base texture + lightmap are merged into
+		// a single BufferGeometry so a 6-face box becomes 1 draw call.
 		brushGroup = new THREE.Group();
 		let animSurfaces = null;
 
-		// Build meshes for all non-sky/water surfaces
 		if ( clmodel.surfaces && clmodel.nummodelsurfaces ) {
 
-			let childIdx = 0;
+			// First pass: collect surfaces grouped by (baseTex, lightmap)
+			const surfaceGroups = [];
 			const startSurf = clmodel.firstmodelsurface;
+
 			for ( let i = 0; i < clmodel.nummodelsurfaces; i ++ ) {
 
 				const psurf = clmodel.surfaces[ startSurf + i ];
-				if ( ! psurf ) continue;
+				if ( psurf == null ) continue;
 				if ( psurf.flags & ( SURF_DRAWSKY | SURF_DRAWTURB ) ) continue;
-				if ( ! psurf.polys ) continue;
+				if ( psurf.polys == null ) continue;
 
 				// Get plane normal, flip if SURF_PLANEBACK
 				let planeNormal = null;
-				if ( psurf.plane ) {
+				if ( psurf.plane != null ) {
 
 					const pn = psurf.plane.normal;
 					if ( psurf.flags & SURF_PLANEBACK ) {
 
-						// Create a new array for the cached geometry (not scratch)
 						planeNormal = new Float32Array( [ - pn[ 0 ], - pn[ 1 ], - pn[ 2 ] ] );
 
 					} else {
@@ -1253,22 +1367,54 @@ export function R_DrawBrushModel( e ) {
 
 				}
 
-				const geom = DrawGLPoly( psurf.polys, planeNormal );
-				if ( ! geom ) continue;
-
 				const baseTex = psurf.texinfo.texture;
-				const t = R_TextureAnimation( baseTex );
-				const diffuse = ( t && t.gl_texture ) ? t.gl_texture : null;
 				const lmTex = lightmapTextures[ psurf.lightmaptexturenum ];
 
+				// Find existing group with same baseTex and lightmap (object reference match)
+				let group = null;
+				for ( let g = 0; g < surfaceGroups.length; g ++ ) {
+
+					if ( surfaceGroups[ g ].baseTex === baseTex && surfaceGroups[ g ].lmTex === lmTex ) {
+
+						group = surfaceGroups[ g ];
+						break;
+
+					}
+
+				}
+
+				if ( group === null ) {
+
+					group = { polys: [], normals: [], baseTex, lmTex };
+					surfaceGroups.push( group );
+
+				}
+
+				group.polys.push( psurf.polys );
+				group.normals.push( planeNormal );
+
+			}
+
+			// Second pass: create one merged mesh per group
+			let childIdx = 0;
+			for ( let g = 0; g < surfaceGroups.length; g ++ ) {
+
+				const group = surfaceGroups[ g ];
+				const geom = _mergeGLPolys( group.polys, group.normals );
+				if ( geom == null ) continue;
+
+				const t = R_TextureAnimation( group.baseTex );
+				const diffuse = ( t != null && t.gl_texture != null ) ? t.gl_texture : null;
+				const lmTex = group.lmTex;
+
 				// Use cached material to avoid shader recompilation
-				const diffuseId = diffuse ? diffuse.id : 0;
-				const lmId = lmTex ? lmTex.id : 0;
+				const diffuseId = diffuse != null ? diffuse.id : 0;
+				const lmId = lmTex != null ? lmTex.id : 0;
 				const matKey = `${diffuseId}_${lmId}`;
 				let material = _brushMaterialCache.get( matKey );
-				if ( ! material ) {
+				if ( material == null ) {
 
-					material = ( diffuse && lmTex )
+					material = ( diffuse != null && lmTex != null )
 						? createQuakeLightmapMaterial( diffuse, lmTex )
 						: new THREE.MeshBasicMaterial( { map: diffuse } );
 					_brushMaterialCache.set( matKey, material );
@@ -1279,10 +1425,10 @@ export function R_DrawBrushModel( e ) {
 				brushGroup.add( mesh );
 
 				// Track surfaces with time-based animation for per-frame material updates
-				if ( baseTex && ( baseTex.anim_total > 0 || baseTex.alternate_anims != null ) ) {
+				if ( group.baseTex != null && ( group.baseTex.anim_total > 0 || group.baseTex.alternate_anims != null ) ) {
 
 					if ( animSurfaces == null ) animSurfaces = [];
-					animSurfaces.push( { childIdx, baseTex, lmTex } );
+					animSurfaces.push( { childIdx, baseTex: group.baseTex, lmTex } );
 
 				}
 
