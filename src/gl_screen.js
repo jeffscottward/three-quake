@@ -871,8 +871,8 @@ export function SCR_UpdateScreen() {
 	} else {
 
 		if ( Cvar_VariableValue( 'crosshair' ) !== 0 && _cls.demoplayback === false )
-			Draw_Character( Math.floor( scr_vrect.x + scr_vrect.width / 2 + Cvar_VariableValue( 'cl_crossx' ) ) - 4,
-				Math.floor( scr_vrect.y + scr_vrect.height / 2 + Cvar_VariableValue( 'cl_crossy' ) ) - 4, 43 ); // '+' crosshair
+			Draw_Character( Math.floor( _vid.width / 2 + Cvar_VariableValue( 'cl_crossx' ) ) - 4,
+				Math.floor( _vid.height / 2 + Cvar_VariableValue( 'cl_crossy' ) ) - 4, 43 ); // '+' crosshair
 
 		SCR_DrawRam();
 		SCR_DrawNet();
