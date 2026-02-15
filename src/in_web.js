@@ -17,7 +17,7 @@ import { Cmd_AddCommand } from './cmd.js';
 import { Con_Printf } from './console.js';
 import { cl, cls, ca_connected } from './client.js';
 import { m_pitch, m_yaw, m_forward, m_side, lookstrafe } from './cl_main.js';
-import { in_mlook, in_strafe, cl_forwardspeed, cl_sidespeed, cl_yawspeed } from './cl_input.js';
+import { in_mlook, in_strafe, cl_forwardspeed, cl_sidespeed, cl_yawspeed, cl_pitchspeed } from './cl_input.js';
 import { V_StopPitchDrift } from './view.js';
 import { host_frametime } from './host.js';
 import { PITCH, YAW } from './quakedef.js';
@@ -109,6 +109,9 @@ let isQuest = false;
 let _xrPrevLeftTrigger = false;
 let _xrPrevRightTrigger = false;
 
+// Gamepad button edge detection (standard mapping)
+let _gpPrev = null;
+
 function requestPointerLock() {
 
 	if ( pointerLocked || isQuest || targetElement == null ) return;
@@ -122,6 +125,165 @@ function requestFullscreen() {
 	if ( isQuest ) return;
 
 	Touch_RequestFullscreen();
+
+}
+
+function GP_GetPrimary() {
+
+	if ( typeof navigator === 'undefined' || navigator.getGamepads == null ) return null;
+
+	const gamepads = navigator.getGamepads();
+	if ( ! gamepads ) return null;
+
+	for ( const gp of gamepads ) {
+
+		if ( gp && gp.connected ) return gp;
+
+	}
+
+	return null;
+
+}
+
+function GP_ApplyDeadzone( v, deadzone ) {
+
+	if ( Math.abs( v ) < deadzone ) return 0;
+
+	// Rescale so movement starts smoothly at the edge of the deadzone
+	return ( v - Math.sign( v ) * deadzone ) / ( 1 - deadzone );
+
+}
+
+function GP_ButtonDown( gp, index ) {
+
+	const b = gp.buttons?.[ index ];
+	if ( ! b ) return false;
+	return typeof b === 'object' ? !! b.pressed : !! b;
+
+}
+
+function GP_ButtonValue( gp, index ) {
+
+	const b = gp.buttons?.[ index ];
+	if ( ! b ) return 0;
+	return typeof b === 'object' ? ( b.value ?? ( b.pressed ? 1 : 0 ) ) : ( b ? 1 : 0 );
+
+}
+
+function GP_KeyEdge( quakeKey, isDown, prev, storeKey ) {
+
+	if ( quakeKey === 0 ) return;
+
+	const wasDown = prev[ storeKey ];
+	if ( isDown !== wasDown ) {
+
+		Key_Event( quakeKey, isDown );
+		prev[ storeKey ] = isDown;
+
+	}
+
+}
+
+function GP_Poll( cmd ) {
+
+	const gp = GP_GetPrimary();
+	if ( ! gp ) {
+
+		_gpPrev = null;
+		return;
+
+	}
+
+	if ( _gpPrev == null || _gpPrev.index !== gp.index ) {
+
+		_gpPrev = {
+			index: gp.index,
+			a: false,
+			b: false,
+			x: false,
+			y: false,
+			lb: false,
+			rb: false,
+			lt: false,
+			rt: false,
+			back: false,
+			start: false,
+			ls: false,
+			rs: false,
+			du: false,
+			dd: false,
+			dl: false,
+			dr: false,
+		};
+
+	}
+
+	// Menu navigation / global buttons
+	// Standard mapping: 0 A, 1 B, 2 X, 3 Y, 4 LB, 5 RB, 6 LT, 7 RT, 8 Back, 9 Start,
+	// 10 LS, 11 RS, 12-15 D-pad.
+	const inMenu = key_dest === key_menu;
+
+	// A: Enter in menu, Jump in game
+	GP_KeyEdge( inMenu ? K_ENTER : K_SPACE, GP_ButtonDown( gp, 0 ), _gpPrev, 'a' );
+	// B: Escape
+	GP_KeyEdge( K_ESCAPE, GP_ButtonDown( gp, 1 ), _gpPrev, 'b' );
+	// X: Reload (default 'r')
+	GP_KeyEdge( 'r'.charCodeAt( 0 ), GP_ButtonDown( gp, 2 ), _gpPrev, 'x' );
+	// Y: Toggle score (default Tab)
+	GP_KeyEdge( K_TAB, GP_ButtonDown( gp, 3 ), _gpPrev, 'y' );
+
+	// LB/RB: Shift/Ctrl (often bound to run/crouch in configs; harmless if unbound)
+	GP_KeyEdge( K_SHIFT, GP_ButtonDown( gp, 4 ), _gpPrev, 'lb' );
+	GP_KeyEdge( K_CTRL, GP_ButtonDown( gp, 5 ), _gpPrev, 'rb' );
+
+	// Triggers: jump/attack (in-game), Enter/attack (menu)
+	const ltDown = GP_ButtonValue( gp, 6 ) > 0.5;
+	const rtDown = GP_ButtonValue( gp, 7 ) > 0.5;
+	GP_KeyEdge( inMenu ? K_ENTER : K_SPACE, ltDown, _gpPrev, 'lt' );
+	GP_KeyEdge( K_MOUSE1, rtDown, _gpPrev, 'rt' );
+
+	// Back/Start: Escape
+	GP_KeyEdge( K_ESCAPE, GP_ButtonDown( gp, 8 ), _gpPrev, 'back' );
+	GP_KeyEdge( K_ESCAPE, GP_ButtonDown( gp, 9 ), _gpPrev, 'start' );
+
+	// D-pad: arrow keys
+	GP_KeyEdge( K_UPARROW, GP_ButtonDown( gp, 12 ), _gpPrev, 'du' );
+	GP_KeyEdge( K_DOWNARROW, GP_ButtonDown( gp, 13 ), _gpPrev, 'dd' );
+	GP_KeyEdge( K_LEFTARROW, GP_ButtonDown( gp, 14 ), _gpPrev, 'dl' );
+	GP_KeyEdge( K_RIGHTARROW, GP_ButtonDown( gp, 15 ), _gpPrev, 'dr' );
+
+	// Gameplay movement/look (skip in menus; skip when cmd is missing)
+	if ( ! cmd || key_dest !== key_game || cls.demoplayback ) return;
+
+	const moveDeadzone = 0.15;
+	const lookDeadzone = 0.12;
+
+	const lx = GP_ApplyDeadzone( gp.axes?.[ 0 ] ?? 0, moveDeadzone );
+	const ly = GP_ApplyDeadzone( gp.axes?.[ 1 ] ?? 0, moveDeadzone );
+	const rx = GP_ApplyDeadzone( gp.axes?.[ 2 ] ?? 0, lookDeadzone );
+	const ry = GP_ApplyDeadzone( gp.axes?.[ 3 ] ?? 0, lookDeadzone );
+
+	// Left stick → movement
+	cmd.forwardmove -= cl_forwardspeed.value * ly;
+	cmd.sidemove += cl_sidespeed.value * lx;
+
+	// Right stick → look (yaw + pitch), always active (no pointer lock required)
+	if ( rx !== 0 ) {
+
+		cl.viewangles[ YAW ] -= rx * cl_yawspeed.value * host_frametime * 2;
+
+	}
+
+	if ( ry !== 0 ) {
+
+		V_StopPitchDrift();
+		cl.viewangles[ PITCH ] += ry * cl_pitchspeed.value * host_frametime * 2;
+		if ( cl.viewangles[ PITCH ] > 80 )
+			cl.viewangles[ PITCH ] = 80;
+		if ( cl.viewangles[ PITCH ] < - 70 )
+			cl.viewangles[ PITCH ] = - 70;
+
+	}
 
 }
 
@@ -687,6 +849,13 @@ export function IN_Move( cmd ) {
 			_xrPrevRightTrigger = rightDown;
 
 		}
+
+	}
+
+	// Standard Gamepad API input (non-XR)
+	if ( ! isXRActive() ) {
+
+		GP_Poll( cmd );
 
 	}
 
