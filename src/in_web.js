@@ -112,6 +112,24 @@ let _xrPrevRightTrigger = false;
 // Gamepad button edge detection (standard mapping)
 let _gpPrev = null;
 
+function GP_ReleaseAll() {
+
+	// If a controller disconnects mid-press, make sure nothing gets "stuck" down.
+	Key_Event( K_SPACE, false );
+	Key_Event( K_ENTER, false );
+	Key_Event( K_ESCAPE, false );
+	Key_Event( K_TAB, false );
+	Key_Event( K_SHIFT, false );
+	Key_Event( K_CTRL, false );
+	Key_Event( K_MOUSE1, false );
+	Key_Event( 'r'.charCodeAt( 0 ), false );
+	Key_Event( K_UPARROW, false );
+	Key_Event( K_DOWNARROW, false );
+	Key_Event( K_LEFTARROW, false );
+	Key_Event( K_RIGHTARROW, false );
+
+}
+
 function requestPointerLock() {
 
 	if ( pointerLocked || isQuest || targetElement == null ) return;
@@ -189,6 +207,7 @@ function GP_Poll( cmd ) {
 	const gp = GP_GetPrimary();
 	if ( ! gp ) {
 
+		if ( _gpPrev != null ) GP_ReleaseAll();
 		_gpPrev = null;
 		return;
 
@@ -208,8 +227,6 @@ function GP_Poll( cmd ) {
 			rt: false,
 			back: false,
 			start: false,
-			ls: false,
-			rs: false,
 			du: false,
 			dd: false,
 			dl: false,
