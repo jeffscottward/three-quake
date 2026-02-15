@@ -308,9 +308,9 @@ function GP_Poll( cmd ) {
 const m_filter = { name: 'm_filter', string: '0', value: 0 };
 const sensitivity = { name: 'sensitivity', string: '3', value: 3 };
 // Gamepad look tuning (standard mapping right stick).
-// Defaults keep yaw/pitch even, slightly reduced vs prior behavior.
-const gp_look_yaw = { name: 'gp_look_yaw', string: '1.5', value: 1.5 };
-const gp_look_pitch = { name: 'gp_look_pitch', string: '1.5', value: 1.5 };
+// Defaults keep yaw/pitch even and slower than the prior hardcoded multiplier.
+const gp_look_yaw = { name: 'gp_look_yaw', string: '1', value: 1 };
+const gp_look_pitch = { name: 'gp_look_pitch', string: '1', value: 1 };
 
 let in_initialized = false;
 
