@@ -287,14 +287,14 @@ function GP_Poll( cmd ) {
 	// Right stick → look (yaw + pitch), always active (no pointer lock required)
 	if ( rx !== 0 ) {
 
-		cl.viewangles[ YAW ] -= rx * cl_yawspeed.value * host_frametime * 2;
+		cl.viewangles[ YAW ] -= rx * cl_yawspeed.value * host_frametime * gp_look_yaw.value;
 
 	}
 
 	if ( ry !== 0 ) {
 
 		V_StopPitchDrift();
-		cl.viewangles[ PITCH ] += ry * cl_pitchspeed.value * host_frametime * 2;
+		cl.viewangles[ PITCH ] += ry * cl_pitchspeed.value * host_frametime * gp_look_pitch.value;
 		if ( cl.viewangles[ PITCH ] > 80 )
 			cl.viewangles[ PITCH ] = 80;
 		if ( cl.viewangles[ PITCH ] < - 70 )
@@ -307,6 +307,10 @@ function GP_Poll( cmd ) {
 // cvars (matching in_win.c)
 const m_filter = { name: 'm_filter', string: '0', value: 0 };
 const sensitivity = { name: 'sensitivity', string: '3', value: 3 };
+// Gamepad look tuning (standard mapping right stick).
+// Defaults keep yaw/pitch even, slightly reduced vs prior behavior.
+const gp_look_yaw = { name: 'gp_look_yaw', string: '1.5', value: 1.5 };
+const gp_look_pitch = { name: 'gp_look_pitch', string: '1.5', value: 1.5 };
 
 let in_initialized = false;
 
@@ -619,6 +623,8 @@ export function IN_Init( element ) {
 	// Register cvars
 	Cvar_RegisterVariable( sensitivity );
 	Cvar_RegisterVariable( m_filter );
+	Cvar_RegisterVariable( gp_look_yaw );
+	Cvar_RegisterVariable( gp_look_pitch );
 
 	// Register commands
 	Cmd_AddCommand( 'force_centerview', IN_ForceCenterView );
